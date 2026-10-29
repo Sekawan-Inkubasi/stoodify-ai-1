@@ -1,4 +1,4 @@
-"""Tes jalur AI dengan Gemini PALSU (tanpa internet/key). Memastikan validasi dan fallback bekerja."""
+"""Tes jalur AI dengan LLM PALSU (tanpa internet/key). Memastikan validasi dan fallback bekerja."""
 import json
 import time
 import pytest
@@ -16,7 +16,7 @@ def bersihkan_cache():
 
 
 def ai_json_valid():
-    """Output 'Gemini' yang benar: pakai jadwal fallback sebagai contoh."""
+    """Output 'LLM' yang benar: pakai jadwal fallback sebagai contoh."""
     sesi = [{"task_id": s["task_id"], "date": s["date"], "start_time": s["start_time"],
              "end_time": s["end_time"], "target_progress": s["target_progress"],
              "reason": "Deadline dekat dan tugas ini cukup sulit."}
@@ -24,16 +24,16 @@ def ai_json_valid():
     return json.dumps({"sessions": sesi})
 
 
-def test_output_valid_dipakai_dan_bersumber_gemini():
+def test_output_valid_dipakai_dan_bersumber_ai():
     r = ai_schedule(STUDENT, NOW, call_fn=lambda p: ai_json_valid())
-    assert r["source"] == "gemini" and r["sessions"]
-    assert all(s["source"] == "gemini" for s in r["sessions"])
+    assert r["source"] == "ai" and r["sessions"]
+    assert all(s["source"] == "ai" for s in r["sessions"])
     assert not any(session_hits_busy(s, STUDENT) for s in r["sessions"])
 
 
 def test_json_dalam_code_fence_tetap_terbaca():
     r = ai_schedule(STUDENT, NOW, call_fn=lambda p: "```json\n" + ai_json_valid() + "\n```")
-    assert r["source"] == "gemini"
+    assert r["source"] == "ai"
 
 
 def test_alias_recommended_date_diterima():
@@ -61,7 +61,7 @@ def test_sebagian_sesi_buruk_dibuang_sisanya_dipakai():
     data["sessions"].append({"task_id": 1, "date": "2026-10-05", "start_time": "08:00",
                              "end_time": "08:45", "target_progress": 90, "reason": "Pagi hari saja."})
     r = ai_schedule(STUDENT, NOW, call_fn=lambda p: json.dumps(data))
-    assert r["source"] == "gemini" and len(r["dropped"]) == 1
+    assert r["source"] == "ai" and len(r["dropped"]) == 1
     assert not any(session_hits_busy(s, STUDENT) for s in r["sessions"])
 
 
@@ -105,11 +105,9 @@ def test_error_api_jatuh_ke_fallback():
     assert r["source"] == "fallback" and "429" in r["fallback_reason"]
 
 
-def test_tanpa_api_key_tidak_memanggil_gemini(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+def test_tanpa_api_key_tidak_memanggil_llm():
     r = ai_schedule(STUDENT, NOW)
-    assert r["source"] == "fallback" and "API_KEY" in r["fallback_reason"]
+    assert r["source"] == "fallback" and "LLM_API_KEY" in r["fallback_reason"]
 
 
 def test_cache_menghemat_panggilan():
@@ -128,3 +126,81 @@ def test_prompt_memuat_slot_dan_tugas_tapi_tanpa_data_pribadi_lain():
                               find_free_slots(STUDENT, NOW))
     assert "SLOT KOSONG" in prompt and "Laporan Konfigurasi Jaringan" in prompt
     assert STUDENT["name"] not in prompt   # nama siswa tidak perlu dikirim ke LLM
+
+
+# --- call_llm: server sibuk -> retry & pindah model (httpx palsu) ---
+def _pasang_http_palsu(monkeypatch, skrip):
+    """skrip: dict model -> list hasil per panggilan (str = sukses, Exception = gagal 'HTTP')."""
+    import types as pytypes
+    panggilan = []
+
+    class Resp:
+        def __init__(self, status, text):
+            self.status_code, self.text = status, text
+        def json(self):
+            return {"choices": [{"message": {"content": self.text}}]}
+
+    def post(url, headers=None, json=None, timeout=None):
+        panggilan.append({"url": url, "auth": headers.get("Authorization"), "model": json["model"],
+                          "json_mode": "response_format" in json})
+        hasil = skrip[json["model"]].pop(0)
+        if isinstance(hasil, Exception):
+            return Resp(int(str(hasil).split()[0]), str(hasil))
+        return Resp(200, hasil)
+
+    monkeypatch.setattr(llm.httpx, "post", post)
+    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+    monkeypatch.setenv("LLM_API_KEY", "palsu")
+    return panggilan
+
+
+def test_503_dicoba_ulang_lalu_berhasil(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "model-a")
+    p = _pasang_http_palsu(monkeypatch, {"model-a": [RuntimeError("503 UNAVAILABLE high demand"), "OK"]})
+    assert llm.call_llm("x") == "OK" and len(p) == 2
+
+
+def test_503_terus_menerus_pindah_ke_model_berikutnya(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "model-a, model-b")
+    p = _pasang_http_palsu(monkeypatch, {
+        "model-a": [RuntimeError("503 UNAVAILABLE"), RuntimeError("503 UNAVAILABLE")],
+        "model-b": ["DARI-B"]})
+    assert llm.call_llm("x") == "DARI-B"
+    assert [c["model"] for c in p] == ["model-a", "model-a", "model-b"]
+
+
+def test_error_biasa_tidak_dicoba_ulang(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "model-a,model-b")
+    p = _pasang_http_palsu(monkeypatch, {"model-a": [RuntimeError("401 API key not valid")], "model-b": ["x"]})
+    with pytest.raises(RuntimeError):
+        llm.call_llm("x")
+    assert len(p) == 1
+
+
+def test_json_mode_ditolak_diulang_tanpa_json_mode(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "model-a")
+    p = _pasang_http_palsu(monkeypatch, {"model-a": [RuntimeError("400 response_format is not supported"), "OK"]})
+    assert llm.call_llm("x") == "OK"
+    assert [c["json_mode"] for c in p] == [True, False]
+
+
+def test_semua_model_sibuk_berujung_fallback(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "model-a")
+    _pasang_http_palsu(monkeypatch, {"model-a": [RuntimeError("503 UNAVAILABLE")] * 2})
+    r = ai_schedule(STUDENT, NOW)
+    assert r["source"] == "fallback" and "503" in r["fallback_reason"] and r["sessions"]
+
+
+def test_base_url_dan_key_dari_env(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "model-a")
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.contoh.id/v1/")
+    p = _pasang_http_palsu(monkeypatch, {"model-a": ["OK"]})
+    assert llm.call_llm("x") == "OK"
+    assert p[0]["url"] == "https://api.contoh.id/v1/chat/completions"
+    assert p[0]["auth"] == "Bearer palsu"
+
+
+def test_default_base_url_openai_dan_kompatibel_key_gemini_lama(monkeypatch):
+    assert llm.get_base_url() == llm.DEFAULT_BASE_URL
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    assert llm.get_base_url() == llm.GEMINI_BASE_URL and llm.get_api_key() == "k"

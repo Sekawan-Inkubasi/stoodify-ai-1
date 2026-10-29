@@ -11,7 +11,17 @@ PROGRESS_REDUCTION = 0.85    # progres 100% menurunkan skor 85%
 
 
 def deadline_dt(task) -> datetime:
+    """Deadline sebagai datetime (waktu lokal tanpa zona). Pakai 'deadline_at' jika ada
+    (dari backend), kalau tidak: tanggal 'deadline' + 23:59."""
+    if task.get("deadline_at"):
+        return task["deadline_at"]
     return datetime.strptime(task["deadline"] + " 23:59", "%Y-%m-%d %H:%M")
+
+
+def remaining_minutes(task) -> int:
+    """Sisa menit yang perlu dijadwalkan: dari progres, dikurangi sesi yang sudah direncanakan."""
+    need = round(task["duration"] * (1 - task["progress"] / 100)) - task.get("planned_min", 0)
+    return max(0, need)
 
 
 def days_left(task, now: datetime) -> float:

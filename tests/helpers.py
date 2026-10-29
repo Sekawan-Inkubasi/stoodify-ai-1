@@ -36,6 +36,7 @@ def session_hits_busy(session, student):
     k = day_key(session["date"])
     s, e = to_min(session["start_time"]), to_min(session["end_time"])
     for item in student["schedules"] + student["activities"]:
-        if item["day"] == k and overlaps(s, e, to_min(item["start"]), to_min(item["end"])):
+        berlaku = (item["date"] == session["date"]) if item.get("date") else (item.get("day") == k)
+        if berlaku and overlaps(s, e, to_min(item["start"]), to_min(item["end"])):
             return True
     return False

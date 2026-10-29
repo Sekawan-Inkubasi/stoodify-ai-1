@@ -31,9 +31,17 @@ def subtract(window, busy_list):
     return free
 
 
-def busy_for_day(student, day_key):
-    items = student["schedules"] + student["activities"]
-    return [(to_min(i["start"]), to_min(i["end"])) for i in items if i["day"] == day_key]
+def busy_for_day(student, day_key, date_iso=None):
+    """Rentang sibuk pada satu hari. Item dengan kunci 'date' hanya berlaku di tanggal itu;
+    item lain berlaku tiap minggu pada hari 'day'."""
+    busy = []
+    for i in student["schedules"] + student["activities"]:
+        if i.get("date"):
+            if i["date"] == date_iso:
+                busy.append((to_min(i["start"]), to_min(i["end"])))
+        elif i.get("day") == day_key:
+            busy.append((to_min(i["start"]), to_min(i["end"])))
+    return busy
 
 
 def find_free_slots(student, now: datetime, days_ahead: int = 14):
@@ -51,7 +59,7 @@ def find_free_slots(student, now: datetime, days_ahead: int = 14):
             start = max(start, ((cur + 14) // 15) * 15)
         if start >= p_end:
             continue
-        for s, e in subtract((start, p_end), busy_for_day(student, key)):
+        for s, e in subtract((start, p_end), busy_for_day(student, key, d.isoformat())):
             if e - s >= MIN_SLOT:
                 slots.append({"date": d.isoformat(), "day": key, "start": s, "end": e})
     return slots

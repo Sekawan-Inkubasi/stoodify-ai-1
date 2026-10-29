@@ -1,0 +1,195 @@
+{
+  "user_id": 7,
+  "date": "2026-10-05",
+  "now": "2026-10-05T08:00:00+07:00",
+  "timezone": "Asia/Jakarta",
+  "preferences": {
+    "start_time": "15:00",
+    "end_time": "21:00",
+    "session_duration": 45,
+    "active_days": "1,2,3,4,5,6"
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "created_at": "2026-10-01T03:00:00Z",
+      "updated_at": "2026-10-04T03:00:00Z",
+      "user_id": 7,
+      "subject_id": 2,
+      "title": "Laporan Konfigurasi Jaringan",
+      "description": "catatan pribadi",
+      "type": "project",
+      "deadline": "2026-10-07T23:59:00+07:00",
+      "difficulty": 4,
+      "estimated_duration": 180,
+      "priority_score": 50.0,
+      "status": "in_progress",
+      "progress": 10,
+      "is_snoozed": false,
+      "notes": ""
+    },
+    {
+      "id": 2,
+      "created_at": "2026-10-01T03:00:00Z",
+      "updated_at": "2026-10-04T03:00:00Z",
+      "user_id": 7,
+      "subject_id": 2,
+      "title": "Latihan Soal Basis Data",
+      "description": "catatan pribadi",
+      "type": "assignment",
+      "deadline": "2026-10-06T16:59:00Z",
+      "difficulty": 2,
+      "estimated_duration": 45,
+      "priority_score": 50.0,
+      "status": "in_progress",
+      "progress": 80,
+      "is_snoozed": false,
+      "notes": ""
+    },
+    {
+      "id": 3,
+      "created_at": "2026-10-01T03:00:00Z",
+      "updated_at": "2026-10-04T03:00:00Z",
+      "user_id": 7,
+      "subject_id": 2,
+      "title": "Persiapan Ujian Matematika",
+      "description": "catatan pribadi",
+      "type": "exam",
+      "deadline": "2026-10-10T23:59:00+07:00",
+      "difficulty": 5,
+      "estimated_duration": 240,
+      "priority_score": 50.0,
+      "status": "pending",
+      "progress": 0,
+      "is_snoozed": false,
+      "notes": ""
+    },
+    {
+      "id": 4,
+      "created_at": "2026-10-01T03:00:00Z",
+      "updated_at": "2026-10-04T03:00:00Z",
+      "user_id": 7,
+      "subject_id": 2,
+      "title": "Baca Bab 3 Sistem Operasi",
+      "description": "catatan pribadi",
+      "type": "reading",
+      "deadline": "2026-10-20T23:59:00+07:00",
+      "difficulty": 2,
+      "estimated_duration": 40,
+      "priority_score": 50.0,
+      "status": "pending",
+      "progress": 0,
+      "is_snoozed": false,
+      "notes": ""
+    },
+    {
+      "id": 5,
+      "created_at": "2026-10-01T03:00:00Z",
+      "updated_at": "2026-10-04T03:00:00Z",
+      "user_id": 7,
+      "subject_id": 2,
+      "title": "Tugas Sudah Selesai",
+      "description": "catatan pribadi",
+      "type": "assignment",
+      "deadline": "2026-10-09T23:59:00+07:00",
+      "difficulty": 3,
+      "estimated_duration": 60,
+      "priority_score": 50.0,
+      "status": "done",
+      "progress": 100,
+      "is_snoozed": false,
+      "notes": ""
+    },
+    {
+      "id": 6,
+      "created_at": "2026-10-01T03:00:00Z",
+      "updated_at": "2026-10-04T03:00:00Z",
+      "user_id": 7,
+      "subject_id": 2,
+      "title": "Tugas Ditunda",
+      "description": "catatan pribadi",
+      "type": "assignment",
+      "deadline": "2026-10-09T23:59:00+07:00",
+      "difficulty": 3,
+      "estimated_duration": 60,
+      "priority_score": 50.0,
+      "status": "pending",
+      "progress": 0,
+      "is_snoozed": true,
+      "notes": ""
+    }
+  ],
+  "schedules": [
+    {
+      "id": 1,
+      "user_id": 7,
+      "subject_id": 2,
+      "day_of_week": "Monday",
+      "start_time": "07:00",
+      "end_time": "16:00"
+    },
+    {
+      "id": 2,
+      "user_id": 7,
+      "subject_id": 2,
+      "day_of_week": "Tuesday",
+      "start_time": "07:00",
+      "end_time": "15:30"
+    },
+    {
+      "id": 3,
+      "user_id": 7,
+      "subject_id": 2,
+      "day_of_week": "Wednesday",
+      "start_time": "07:00",
+      "end_time": "15:30"
+    },
+    {
+      "id": 4,
+      "user_id": 7,
+      "subject_id": 2,
+      "day_of_week": "Thursday",
+      "start_time": "07:00",
+      "end_time": "16:00"
+    },
+    {
+      "id": 5,
+      "user_id": 7,
+      "subject_id": 2,
+      "day_of_week": "Friday",
+      "start_time": "07:00",
+      "end_time": "14:30"
+    }
+  ],
+  "activities": [
+    {
+      "id": 1,
+      "user_id": 7,
+      "title": "Ekskul DKV",
+      "day_of_week": "Wednesday",
+      "start_time": "16:00",
+      "end_time": "17:30",
+      "recurrence": "weekly"
+    },
+    {
+      "id": 2,
+      "user_id": 7,
+      "title": "Makan malam",
+      "start_time": "18:00",
+      "end_time": "19:00",
+      "recurrence": "daily"
+    }
+  ],
+  "existing_sessions": [
+    {
+      "id": 11,
+      "user_id": 7,
+      "task_id": 3,
+      "session_date": "2026-10-06T00:00:00Z",
+      "start_time": "16:00",
+      "duration": 45,
+      "status": "planned",
+      "ai_generated": true
+    }
+  ]
+}

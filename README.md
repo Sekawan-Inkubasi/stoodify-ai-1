@@ -1,8 +1,8 @@
 # Stoodify AI Engine
 
-Engine kecerdasan inti Stoodify (bagian **AI Specialist 1**): menghitung prioritas tugas siswa, mencari slot waktu kosong, lalu menyusun jadwal sesi belajar harian. Jadwal bisa dibuat oleh **Gemini** atau, jika AI gagal, oleh **fallback rule-based** tanpa AI.
+Engine kecerdasan inti Stoodify (bagian **AI Specialist 1**): menghitung prioritas tugas siswa, mencari slot waktu kosong, lalu menyusun jadwal sesi belajar harian. Jadwal bisa dibuat oleh **LLM apa pun yang OpenAI-compatible** (OpenAI, Gemini, Groq, OpenRouter, Ollama, dll.) atau, jika AI gagal, oleh **fallback rule-based** tanpa AI.
 
-Repo ini berisi engine, halaman uji sederhana (Flask), dan test suite. Datanya masih dummy (`data.py`), belum terhubung ke backend atau database.
+Repo ini berisi engine, service HTTP untuk backend (FastAPI), halaman uji sederhana (Flask), dan test suite. Datanya masih dummy (`data.py`), belum terhubung ke backend atau database.
 
 ## Fitur
 
@@ -11,7 +11,7 @@ Repo ini berisi engine, halaman uji sederhana (Flask), dan test suite. Datanya m
 | Priority Scoring | `priority.py` | Skor 0-100 per tugas dari deadline, kesulitan, durasi, jenis, late risk, dan progres |
 | Time-Slot Finder | `slots.py` | Slot kosong = jam belajar − jadwal sekolah − kegiatan rutin |
 | Fallback Scheduler | `scheduler.py` | Jadwal greedy tanpa AI, lengkap dengan teks alasan dan peringatan "waktu tidak cukup" |
-| AI Scheduler (Gemini) | `llm.py` | Prompt, panggilan Gemini, batas 15 detik, cache, retry, dan pindah model |
+| AI Scheduler (LLM) | `llm.py` | Prompt, panggilan API OpenAI-compatible, batas 15 detik, cache, retry, dan pindah model |
 | Validator | `validator.py` | Validasi JSON (Pydantic) dan aturan jadwal sebelum hasil AI dipakai |
 | Halaman uji | `app.py`, `templates/index.html` | Satu halaman untuk melihat skor, slot, dan jadwal |
 | Dataset dummy | `data.py` | 1 siswa, jadwal sekolah, kegiatan rutin, 8 tugas |
@@ -24,8 +24,12 @@ stoodify-ai/
 ├── priority.py        # rumus skor prioritas
 ├── slots.py           # time-slot finder
 ├── scheduler.py       # fallback greedy
+├── adapter.py         # payload backend Go <-> struktur engine
+├── service.py         # service FastAPI untuk AI_SCHEDULER_URL
+├── contoh_payload.json# contoh request dari backend (untuk uji manual)
+├── Procfile           # perintah start untuk Railway/Render
 ├── validator.py       # validasi output LLM
-├── llm.py             # integrasi Gemini
+├── llm.py             # integrasi LLM (OpenAI-compatible)
 ├── app.py             # Flask (halaman uji)
 ├── templates/
 │   └── index.html
@@ -47,36 +51,29 @@ python app.py
 
 Buka `http://127.0.0.1:5000`. Tombol **Generate Jadwal (Fallback)** langsung bekerja tanpa konfigurasi apa pun.
 
-### Mengaktifkan Gemini
+### Mengaktifkan AI (LLM OpenAI-compatible)
 
-1. Buat API key di https://aistudio.google.com/apikey
-2. Salin `.env.example` menjadi `.env`, lalu isi:
+Engine memakai format `POST {base_url}/chat/completions`, jadi penyedia apa pun yang OpenAI-compatible bisa dipakai. Cukup isi tiga hal:
+
+1. Salin `.env.example` menjadi `.env`, lalu isi:
 
 ```
-GEMINI_API_KEY=key_kamu
-GEMINI_MODEL=model-utama,model-cadangan
+LLM_API_KEY=token_kamu
+LLM_BASE_URL=https://alamat-api-penyedia/v1
+LLM_MODEL=model-utama,model-cadangan
 ```
 
-3. Jalankan ulang `python app.py`, lalu klik **Pakai AI (Gemini)**.
+2. Jalankan ulang `python app.py`, lalu klik **Pakai AI (LLM)**.
+
+Contoh `LLM_BASE_URL`: OpenAI `https://api.openai.com/v1`, Gemini `https://generativelanguage.googleapis.com/v1beta/openai`, Groq `https://api.groq.com/openai/v1`, OpenRouter `https://openrouter.ai/api/v1`, Ollama `http://localhost:11434/v1`.
 
 Catatan:
 
-- `GEMINI_MODEL` boleh berisi beberapa model dipisah koma. Model berikutnya dipakai jika model pertama sibuk (error 503/429).
-- Nama model Google sering berganti dan berbeda per akun. Untuk melihat model yang tersedia, buat `cek_model.py`:
-
-```python
-from llm import load_env, get_api_key
-from google import genai
-
-load_env()
-client = genai.Client(api_key=get_api_key())
-for m in client.models.list():
-    if "generateContent" in (getattr(m, "supported_actions", None) or []):
-        print(m.name.replace("models/", ""))
-```
-
-- Pilih model berlabel `flash` agar cepat. Model `preview` lebih sering kena "high demand".
-- File `.env` sudah masuk `.gitignore`. Jangan pernah meng-commit API key.
+- `LLM_MODEL` boleh berisi beberapa model dipisah koma. Model berikutnya dipakai jika model pertama sibuk (error 503/429).
+- Nama lama `GEMINI_API_KEY` dan `GEMINI_MODEL` masih dikenali. Jika hanya `GEMINI_API_KEY` yang diisi, base URL otomatis ke endpoint Gemini.
+- Untuk melihat model yang tersedia di penyedia kamu, jalankan `python cek_model.py`. Untuk diagnosis kecepatan dan kevalidan hasil, jalankan `python tes_llm.py`.
+- Jika penyedia menolak `response_format` (JSON mode), engine otomatis mengulang tanpa JSON mode.
+- File `.env` sudah masuk `.gitignore`. Jangan pernah meng-commit token.
 
 ## Cara kerja
 
@@ -105,11 +102,11 @@ Untuk tiap hari aktif (14 hari ke depan): ambil jam belajar siswa, kurangi jadwa
 
 **Fallback (greedy):** tugas diurutkan dari skor tertinggi (tugas yang sudah lewat deadline didahulukan). Tiap tugas mengambil slot paling awal yang masih sebelum deadline-nya, maksimal 2 sesi per hari, dengan jeda 10 menit antar sesi. Jika waktu tidak cukup, muncul peringatan.
 
-**Gemini:** kode menghitung skor dan slot, lalu Gemini hanya menempatkan sesi ke slot kosong dan menulis `reason`. Hasilnya divalidasi sebelum dipakai.
+**LLM:** kode menghitung skor dan slot, lalu LLM hanya menempatkan sesi ke slot kosong dan menulis `reason`. Hasilnya divalidasi sebelum dipakai.
 
 ### 4. Validasi dan fallback otomatis
 
-Sesi dari Gemini ditolak jika:
+Sesi dari LLM ditolak jika:
 
 - di luar slot kosong (bentrok sekolah, kegiatan, atau jam belajar),
 - melewati deadline,
@@ -119,12 +116,12 @@ Sesi dari Gemini ditolak jika:
 
 Sesi buruk dibuang satu per satu. Jika lebih dari separuh sesi buruk, atau tidak ada yang lolos, seluruh hasil AI ditolak dan fallback dipakai. Fallback juga aktif otomatis jika:
 
-- `GEMINI_API_KEY` belum diatur,
-- Gemini tidak merespons dalam 15 detik,
+- `LLM_API_KEY` belum diatur,
+- LLM tidak merespons dalam 15 detik,
 - terjadi error API (kuota habis, jaringan, key salah),
 - output bukan JSON yang valid.
 
-Nama siswa tidak dikirim ke Gemini. Hasil AI yang sukses di-cache 10 menit untuk menghemat kuota.
+Nama siswa tidak dikirim ke LLM. Hasil AI yang sukses di-cache 10 menit untuk menghemat kuota.
 
 ## Mengubah bobot dan parameter
 
@@ -132,7 +129,7 @@ Nama siswa tidak dikirim ke Gemini. Hasil AI yang sukses di-cache 10 menit untuk
 - **Parameter rumus** (di bagian atas `priority.py`): `IMPORTANCE`, `MAX_DAILY_MINUTES` (240), `HORIZON_DAYS` (14), `PROGRESS_REDUCTION` (0,85).
 - **Ambang label:** angka 55 dan 35 di `score_task` (`priority.py`).
 - **Penjadwalan:** `BREAK`, `MIN_SESSION`, `MAX_PER_TASK_PER_DAY` di `scheduler.py`; `MIN_SLOT` di `slots.py`.
-- **Validasi AI:** `MIN_LEN`, `MAX_LEN`, `TOLERANCE` di `validator.py`; `TIMEOUT_SECONDS` dan `CACHE_TTL` di `llm.py`.
+- **Validasi AI:** `MIN_LEN`, `MAX_LEN`, `TOLERANCE` di `validator.py`; `AI_TIMEOUT_SECONDS` (.env) dan `CACHE_TTL` di `llm.py`.
 - **Data uji:** ubah `data.py`, lalu refresh halaman. Waktu "sekarang" (`NOW`) sengaja dikunci agar hasil selalu sama.
 
 ## Menguji
@@ -141,7 +138,7 @@ Nama siswa tidak dikirim ke Gemini. Hasil AI yang sukses di-cache 10 menit untuk
 python -m pytest -v
 ```
 
-Ada 55 tes, tanpa internet dan tanpa API key (Gemini diganti tiruan):
+Ada 100 tes, tanpa internet dan tanpa API key (LLM diganti tiruan):
 
 | File | Isi |
 |---|---|
@@ -149,6 +146,8 @@ Ada 55 tes, tanpa internet dan tanpa API key (Gemini diganti tiruan):
 | `tests/test_slots.py` | Slot tidak menabrak jadwal, batas jam, hari nonaktif, slot pendek |
 | `tests/test_scheduler.py` | Aturan jadwal pada data buatan dan 150 siswa acak berseed |
 | `tests/test_llm.py` | JSON rusak, sesi melanggar aturan, timeout, error API, retry 503, pindah model, cache |
+| `tests/test_adapter.py` | Pemetaan data backend: jenis tugas, hari, zona waktu, tugas selesai/ditunda, sesi lama, data opsional hilang |
+| `tests/test_service.py` | Autentikasi bearer, format balasan, fallback, timeout, privasi prompt |
 
 Tes prioritas mengecek aturan (urutan dan logika), bukan angka persis, sehingga tidak ikut rusak saat bobot dikalibrasi.
 
@@ -177,18 +176,54 @@ Bentuk satu sesi:
 }
 ```
 
+## Integrasi dengan backend (service FastAPI)
+
+Backend Go memanggil engine lewat HTTP: `POST AI_SCHEDULER_URL` dengan header `Authorization: Bearer AI_API_KEY`.
+
+```powershell
+uvicorn service:app --port 8000
+```
+
+| Endpoint | Fungsi |
+|---|---|
+| `GET /health` | Cek hidup (tanpa autentikasi) |
+| `POST /schedule` | Terima payload backend, balas `{"sessions": [...], "warnings": [...], "source": ...}` |
+
+Pengaturan di `.env` engine dan backend:
+
+| Di mana | Variabel | Nilai |
+|---|---|---|
+| Engine | `AI_API_KEY` | Rahasia bersama (sama dengan di backend) |
+| Engine | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | Token, alamat API, dan model LLM |
+| Engine | `AI_TIMEOUT_SECONDS` | 10 (backend menunggu 15 detik) |
+| Backend | `AI_SCHEDULER_URL` | `http://localhost:8000/schedule` (atau URL deploy) |
+| Backend | `AI_API_KEY` | Sama dengan di engine |
+
+Yang dilakukan engine terhadap payload backend:
+
+- Jenis tugas `exam/project/assignment/reading` dipetakan ke istilah engine, dan deadline RFC3339 dikonversi ke WIB.
+- Tugas `done` dan `is_snoozed` tidak dijadwalkan.
+- Sesi `planned` yang sudah ada dianggap jam sibuk dan mengurangi kebutuhan menit tugasnya.
+- Kegiatan `daily` berlaku tiap hari. Kegiatan tanpa hari dianggap tiap hari (aman, tapi boros slot) dan diberi peringatan.
+- Data opsional (`schedules`, `activities`, `existing_sessions`, `now`, `timezone`) yang tidak dikirim memunculkan `warnings`. Tanpa jadwal sekolah, sesi bisa bentrok.
+- Field `description` dan `notes` tidak dikirim ke LLM.
+
+Respons memakai nama field yang sama dengan struct `slotRekomendasi` di backend (`recommended_date`, dst.). Field `warnings`, `source`, `fallback_reason` baru terbaca setelah backend menambahkannya.
+
 ## Batasan saat ini
 
 - Data masih dummy, belum dari database.
-- Belum ada integrasi ke endpoint `/ai/schedule-recommendations` di backend Golang. Halaman Flask hanya alat uji.
+- Service sudah siap, tetapi belum diuji end-to-end dengan backend asli dan LLM asli. Backend juga perlu menambahkan `schedules`, `activities` (dengan hari), dan `existing_sessions` ke payload.
+- Free tier hosting bisa tertidur (cold start) lebih dari 15 detik, sehingga backend memakai fallback-nya sendiri. Jaga tetap hangat lewat ping `/health`.
+- Belum ada rate limit per user di engine.
 - Bobot dan ambang masih tebakan awal, belum dikalibrasi dengan data tugas siswa sungguhan.
 - Adaptive reschedule (susun ulang saat sesi dilewati) belum ada.
-- Panggilan ke Gemini asli bergantung pada kuota, ketersediaan model, dan koneksi internet.
+- Panggilan ke LLM asli bergantung pada kuota, ketersediaan model, dan koneksi internet.
 - Metode greedy bisa membuat tugas berprioritas rendah kehabisan slot sebelum deadline-nya.
 
 ## Langkah berikutnya
 
 1. Kalibrasi bobot dengan data tugas siswa nyata.
-2. Menetapkan kontrak API (request/response) bersama Backend Dev.
-3. Membungkus engine sebagai service (misalnya FastAPI) atau memportnya ke Go.
+2. Backend menambah data payload (jadwal sekolah, kegiatan, sesi lama).
+3. Deploy service dan isi `AI_SCHEDULER_URL`.
 4. Uji end-to-end minimal 5 skenario sampai hasil tersimpan di database.

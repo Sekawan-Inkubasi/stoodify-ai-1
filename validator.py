@@ -3,7 +3,7 @@ import json
 import re
 from datetime import datetime
 from pydantic import AliasChoices, BaseModel, Field, ValidationError, field_validator
-from priority import deadline_dt, days_left
+from priority import deadline_dt, days_left, remaining_minutes
 from slots import to_min
 
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -89,7 +89,7 @@ def validate_sessions(sessions, student, now: datetime, free_slots):
         if any(d == s.date and a < y and x < b for d, x, y in taken):
             errors.append(f"{tag}: bertabrakan dengan sesi lain")
             continue
-        need = round(t["duration"] * (1 - t["progress"] / 100))
+        need = remaining_minutes(t)
         if minutes.get(s.task_id, 0) + dur > need + TOLERANCE:
             errors.append(f"{tag}: melebihi kebutuhan waktu tugas")
             continue

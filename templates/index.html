@@ -47,7 +47,7 @@
     <div class="row" id="weights"></div>
     <div class="row" style="margin-top:12px">
       <button id="gen">Generate Jadwal (Fallback)</button>
-      <button id="genAi">Pakai AI (Gemini)</button>
+      <button id="genAi">Pakai AI (LLM)</button>
       <span id="status" class="mute"></span>
     </div>
   </section>
@@ -103,8 +103,8 @@ async function run(mode = "fallback") {
   const r = await (await fetch("/api/run", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({weights:w, mode})})).json();
 
   const secs = (r.latency_ms / 1000).toFixed(1);
-  $("status").innerHTML = r.source === "gemini"
-    ? `<b style="color:var(--low)">Sumber: Gemini</b> (${r.model}, ${secs} dtk)`
+  $("status").innerHTML = r.source === "ai"
+    ? `<b style="color:var(--low)">Sumber: AI</b> (${r.model}, ${secs} dtk)`
     : `<b>Sumber: Fallback</b> (${secs} dtk)` + (r.fallback_reason ? ` - <span style="color:var(--high)">${r.fallback_reason}</span>` : "");
   const notes = [...r.warnings, ...(r.dropped || []).map(x => "Ditolak validasi: " + x)];
   $("warnSec").style.display = notes.length ? "block" : "none";
@@ -129,7 +129,7 @@ async function run(mode = "fallback") {
 }
 
 $("gen").onclick = () => run("fallback");
-$("genAi").onclick = async () => { $("genAi").disabled = true; $("status").textContent = "Menunggu Gemini..."; await run("ai"); $("genAi").disabled = false; };
+$("genAi").onclick = async () => { $("genAi").disabled = true; $("status").textContent = "Menunggu AI..."; await run("ai"); $("genAi").disabled = false; };
 load();
 </script>
 </body>

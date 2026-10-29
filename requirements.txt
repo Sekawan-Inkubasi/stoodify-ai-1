@@ -1,4 +1,7 @@
 flask
 pytest
 pydantic
-google-genai
+fastapi
+uvicorn
+httpx
+tzdata

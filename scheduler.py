@@ -1,6 +1,6 @@
 """Langkah 4 - Fallback scheduler (greedy, tanpa AI)."""
 from datetime import datetime
-from priority import score_all, deadline_dt, days_left
+from priority import score_all, deadline_dt, days_left, remaining_minutes
 from slots import find_free_slots, fmt
 
 BREAK = 10          # menit jeda antar sesi
@@ -53,7 +53,9 @@ def fallback_schedule(student, now: datetime, weights=None):
     ordered = sorted(scores, key=lambda x: (x["days_left"] > 0, -x["score"]))
     for sc in ordered:
         task = by_id[sc["task_id"]]
-        need = round(task["duration"] * (1 - task["progress"] / 100))
+        need = remaining_minutes(task)
+        if need <= 0:
+            continue
         overdue = days_left(task, now) <= 0
         dl_dt = deadline_dt(task)
         progress = task["progress"]
