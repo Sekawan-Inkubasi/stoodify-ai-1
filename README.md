@@ -1,8 +1,13 @@
-# Stoodify AI Engine
+# Stoodify AI Engine (Unified AI Specialist 1 & 2)
 
-Engine kecerdasan inti Stoodify (bagian **AI Specialist 1**): menghitung prioritas tugas siswa, mencari slot waktu kosong, lalu menyusun jadwal sesi belajar harian. Jadwal bisa dibuat oleh **LLM apa pun yang OpenAI-compatible** (OpenAI, Gemini, Groq, OpenRouter, Ollama, dll.) atau, jika AI gagal, oleh **fallback rule-based** tanpa AI.
+Engine kecerdasan buatan terpadu Stoodify:
+1. **AI Specialist 1 (Smart Study Scheduler & Workload Balancer)**: Menghitung skor prioritas tugas siswa, mencari slot waktu belajar luang (14 hari ke depan), lalu menyusun rekomendasi sesi belajar adaptif tanpa bentrok sekolah atau kegiatan rutin.
+2. **AI Specialist 2 (Material & Topic Predictor)**: Menganalisis riwayat tugas lampau dan silabus Kurikulum Merdeka (RAG) untuk memprediksi materi/topik pembelajaran mendatang lengkap dengan prasyarat dan saran persiapan (*Curi Start*).
+3. **Feedback Evaluator**: Menganalisis metrik akurasi feedback pengguna baik secara global maupun per mata pelajaran.
 
-Repo ini berisi engine, service HTTP untuk backend (FastAPI), halaman uji sederhana (Flask), dan test suite. Datanya masih dummy (`data.py`), belum terhubung ke backend atau database.
+Jadwal dan prediksi materi diproses oleh **LLM OpenAI-compatible** (Groq, Google Gemini via OpenAI-endpoint, OpenAI, OpenRouter, Ollama) atau, jika AI offline/timeout/tanpa key, oleh **fallback deterministik**.
+
+Repo ini menyediakan service HTTP untuk backend (FastAPI di `service.py`), halaman uji lokal (Flask di `app.py`), dan test suite otomatis (117 test cases). Terhubung ke backend Go melalui endpoint `POST /schedule`, `POST /predict`, dan `POST /feedback` dengan autentikasi `Bearer <AI_API_KEY>`.
 
 ## Fitur
 
@@ -10,31 +15,34 @@ Repo ini berisi engine, service HTTP untuk backend (FastAPI), halaman uji sederh
 |---|---|---|
 | Priority Scoring | `priority.py` | Skor 0-100 per tugas dari deadline, kesulitan, durasi, jenis, late risk, dan progres |
 | Time-Slot Finder | `slots.py` | Slot kosong = jam belajar − jadwal sekolah − kegiatan rutin |
-| Fallback Scheduler | `scheduler.py` | Jadwal greedy tanpa AI, lengkap dengan teks alasan dan peringatan "waktu tidak cukup" |
-| AI Scheduler (LLM) | `llm.py` | Prompt, panggilan API OpenAI-compatible, batas 15 detik, cache, retry, dan pindah model |
-| Validator | `validator.py` | Validasi JSON (Pydantic) dan aturan jadwal sebelum hasil AI dipakai |
-| Halaman uji | `app.py`, `templates/index.html` | Satu halaman untuk melihat skor, slot, dan jadwal |
+| Fallback Scheduler | `scheduler.py` | Jadwal greedy tanpa AI, lengkap dengan teks alasan dan peringatan |
+| AI Scheduler (LLM) | `llm.py` | Prompt, pemanggilan OpenAI-compatible API, batas timeout, cache, retry, dan model fallback |
+| Material Predictor | `predictor.py` | Prediksi materi mendatang berbasis riwayat tugas dan silabus Kurikulum Merdeka (RAG) |
+| Feedback Analytics | `feedback.py` | Evaluasi feedback ketepatan prediksi materi global dan per mata pelajaran |
+| Validator | `validator.py` | Validasi JSON (Pydantic) dan aturan batas jadwal sebelum hasil AI disetujui |
+| Halaman uji | `app.py`, `templates/index.html` | Antarmuka interaktif lokal untuk evaluasi skor, slot, dan jadwal |
+| Dataset Silabus | `DATA/silabus_awal.csv` | Silabus referensi Kurikulum Merdeka Fase F (Matematika, Pemrograman, B. Indonesia) |
 | Dataset dummy | `data.py` | 1 siswa, jadwal sekolah, kegiatan rutin, 8 tugas |
 
 ## Struktur folder
 
 ```
-stoodify-ai/
-├── data.py            # dataset buatan + waktu "sekarang" yang dikunci
-├── priority.py        # rumus skor prioritas
-├── slots.py           # time-slot finder
-├── scheduler.py       # fallback greedy
-├── adapter.py         # payload backend Go <-> struktur engine
-├── service.py         # service FastAPI untuk AI_SCHEDULER_URL
-├── contoh_payload.json# contoh request dari backend (untuk uji manual)
-├── Procfile           # perintah start untuk Railway/Render
-├── validator.py       # validasi output LLM
-├── llm.py             # integrasi LLM (OpenAI-compatible)
-├── app.py             # Flask (halaman uji)
-├── templates/
-│   └── index.html
-├── tests/             # pytest
-├── .env.example       # contoh konfigurasi
+stoodify-ai-1/
+├── DATA/
+│   └── silabus_awal.csv  # Dataset acuan silabus Kurikulum Merdeka (RAG)
+├── data.py               # Dataset buatan + waktu acuan pengujian
+├── priority.py           # Rumus skor prioritas tugas
+├── slots.py              # Time-slot finder
+├── scheduler.py          # Fallback greedy scheduler
+├── predictor.py          # Material & Topic Predictor (Integrasi AI-2)
+├── feedback.py           # Evaluasi metrik feedback akurasi materi
+├── adapter.py            # Adaptasi payload backend Go <-> struktur engine
+├── service.py            # Service FastAPI (POST /schedule, /predict, /feedback)
+├── validator.py          # Validasi output LLM dan aturan jadwal
+├── llm.py                # Integrasi LLM (OpenAI-compatible)
+├── app.py                # Flask (halaman uji)
+├── tests/                # Test suite pytest (117 test cases)
+├── .env.example          # Contoh konfigurasi environment
 ├── pytest.ini
 └── requirements.txt
 ```
@@ -186,8 +194,11 @@ uvicorn service:app --port 8000
 
 | Endpoint | Fungsi |
 |---|---|
-| `GET /health` | Cek hidup (tanpa autentikasi) |
-| `POST /schedule` | Terima payload backend, balas `{"sessions": [...], "warnings": [...], "source": ...}` |
+| `GET /health` | Cek status service (tanpa autentikasi) |
+| `POST /schedule` | Penjadwalan cerdas belajar adaptif (`AI_SCHEDULER_URL`) |
+| `POST /predict` | Prediksi materi Kurikulum Merdeka (`AI_PREDICTOR_URL`) |
+| `POST /feedback` | Evaluasi analitik feedback akurasi materi global |
+| `POST /feedback/per-mapel` | Evaluasi analitik feedback akurasi per mata pelajaran |
 
 Pengaturan di `.env` engine dan backend:
 
@@ -197,6 +208,7 @@ Pengaturan di `.env` engine dan backend:
 | Engine | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | Token, alamat API, dan model LLM |
 | Engine | `AI_TIMEOUT_SECONDS` | 10 (backend menunggu 15 detik) |
 | Backend | `AI_SCHEDULER_URL` | `http://localhost:8000/schedule` (atau URL deploy) |
+| Backend | `AI_PREDICTOR_URL` | `http://localhost:8000/predict` (atau URL deploy) |
 | Backend | `AI_API_KEY` | Sama dengan di engine |
 
 Yang dilakukan engine terhadap payload backend:

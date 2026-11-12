@@ -1,0 +1,23 @@
+﻿mata_pelajaran,kelas,kurikulum,urutan_materi,materi,prasyarat
+Matematika,XI,Kurikulum Merdeka,1,Komposisi Fungsi,Fungsi
+Matematika,XI,Kurikulum Merdeka,2,Invers Fungsi,Fungsi dan Komposisi Fungsi
+Matematika,XI,Kurikulum Merdeka,3,Transformasi Fungsi,Fungsi
+Matematika,XI,Kurikulum Merdeka,4,Translasi Fungsi,Transformasi Fungsi
+Matematika,XI,Kurikulum Merdeka,5,Refleksi Fungsi,Transformasi Fungsi
+Matematika,XI,Kurikulum Merdeka,6,Dilatasi Fungsi,Transformasi Fungsi
+Matematika,XI,Kurikulum Merdeka,7,Rotasi Fungsi,Transformasi Fungsi
+Dasar Pemrograman,XI,Kurikulum Merdeka,1,Variabel dan Tipe Data,
+Dasar Pemrograman,XI,Kurikulum Merdeka,2,Operator,Variabel dan Tipe Data
+Dasar Pemrograman,XI,Kurikulum Merdeka,3,Percabangan,Operator
+Dasar Pemrograman,XI,Kurikulum Merdeka,4,Perulangan,Percabangan
+Dasar Pemrograman,XI,Kurikulum Merdeka,5,Fungsi,Perulangan
+Bahasa Indonesia,XI,Kurikulum Merdeka,1,Teks Argumentasi,
+Bahasa Indonesia,XI,Kurikulum Merdeka,2,Teks Persuasi,Teks Argumentasi
+Bahasa Indonesia,XI,Kurikulum Merdeka,3,Teks Berita,Teks Argumentasi
+Bahasa Indonesia,XI,Kurikulum Merdeka,4,Cerpen,Teks Narasi
+Bahasa Indonesia,XI,Kurikulum Merdeka,5,Puisi,Unsur Pembangun Puisi
+Bahasa Indonesia,XI,Kurikulum Merdeka,6,Drama,Unsur Intrinsik
+Bahasa Indonesia,XI,Kurikulum Merdeka,7,Karya Ilmiah,Teks Argumentasi
+Bahasa Indonesia,XI,Kurikulum Merdeka,8,Proposal,Karya Ilmiah
+Bahasa Indonesia,XI,Kurikulum Merdeka,9,Resensi,Buku atau Karya Sastra
+Bahasa Indonesia,XI,Kurikulum Merdeka,10,Debat,Teks Argumentasi

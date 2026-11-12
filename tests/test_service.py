@@ -125,3 +125,42 @@ def test_prompt_llm_tidak_memuat_catatan_pribadi(client, monkeypatch):
 def test_tugas_ditunda_dan_selesai_tidak_dijadwalkan(client):
     sesi = client.post("/schedule", json=contoh_payload(), headers=H).json()["sessions"]
     assert {s["task_id"] for s in sesi}.isdisjoint({5, 6})
+
+
+def test_predict_tanpa_auth_ditolak(client):
+    payload = {"subject": "Matematika", "difficulty": 4, "history": []}
+    assert client.post("/predict", json=payload).status_code == 401
+
+
+def test_predict_dengan_auth_sukses(client):
+    payload = {
+        "subject": "Matematika",
+        "difficulty": 4,
+        "history": [
+            {"title": "PR Komposisi Fungsi", "material_name": "Komposisi Fungsi", "deadline": "2026-11-01"}
+        ]
+    }
+    r = client.post("/predict", json=payload, headers=H)
+    assert r.status_code == 200
+    data = r.json()
+    assert "predicted_topic" in data
+    assert "confidence" in data
+    assert "reason" in data
+    assert "prerequisites" in data
+    assert "preparation_suggestion" in data
+    assert data["source"] in ("ai", "fallback")
+
+
+def test_feedback_endpoint(client):
+    payload = {
+        "data_feedback": [
+            {"subject": "Matematika", "user_feedback": "accurate"},
+            {"subject": "Matematika", "user_feedback": "inaccurate"},
+        ]
+    }
+    r = client.post("/feedback", json=payload, headers=H)
+    assert r.status_code == 200
+    res = r.json()
+    assert res["total_feedback"] == 2
+    assert res["akurasi_feedback"] == 50.0
+
