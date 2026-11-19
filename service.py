@@ -2,6 +2,7 @@
 Endpoint:
 - POST /schedule : Smart Study Scheduler (AI Specialist 1)
 - POST /predict  : Material & Topic Predictor (AI Specialist 2 terpadu)
+- POST /chat     : Conversational Study Assistant (LLM Chatbot)
 - POST /feedback : Analisis feedback akurasi materi
 - GET  /health   : Health check
 """
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from adapter import PayloadError, adapt_request, to_backend_sessions
+from chatbot import ai_chat
 from feedback import analisis_feedback, analisis_feedback_per_mapel
 from llm import ai_schedule, load_env
 from predictor import predict_material
@@ -48,6 +50,12 @@ class PredictionPayload(BaseModel):
 
 class FeedbackPayload(BaseModel):
     data_feedback: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ChatPayload(BaseModel):
+    message: str = Field(..., min_length=1, description="Pesan dari siswa")
+    history: Optional[List[Dict[str, Any]]] = Field(default_factory=list, description="Riwayat percakapan")
+    context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Konteks tugas dan siswa")
 
 
 @app.get("/health")
@@ -114,6 +122,28 @@ async def predict(payload: PredictionPayload, authorization: str | None = Header
         "prerequisites": result.get("prerequisites"),
         "preparation_suggestion": result.get("preparation_suggestion"),
         "syllabus_reference": result.get("syllabus_reference"),
+        "source": result.get("source"),
+        "latency_ms": latency,
+    }
+
+
+@app.post("/chat")
+async def chat_endpoint(payload: ChatPayload, authorization: str | None = Header(default=None)):
+    check_auth(authorization)
+    t0 = time.time()
+    result = await run_in_threadpool(
+        ai_chat,
+        message=payload.message,
+        history=payload.history,
+        context=payload.context,
+    )
+    latency = int((time.time() - t0) * 1000)
+    log.info("chat msg='%s' action=%s source=%s ms=%d",
+             payload.message[:30], result.get("action"), result.get("source"), latency)
+    return {
+        "reply": result.get("reply"),
+        "action": result.get("action"),
+        "model": result.get("model"),
         "source": result.get("source"),
         "latency_ms": latency,
     }
