@@ -49,6 +49,7 @@ Dokumen ini adalah **Source of Truth** utama bagi AI Agent maupun developer yang
 | `predictor_data.py` | Sumber Data Silabus | Pemuatan `DATA/kurikulum_merdeka.csv` (cache in-memory), `MAPEL_ALIASES`, `normalize_class_level()`, `resolve_jenjang()`, dan `baca_silabus()` berfilter jenjang/kelas/jalur/kurikulum. |
 | `predictor_prompts.py` | Template Prompt Prediktor | Dua varian prompt: silabus tersedia (alur `No. Urut + 1`) dan silabus tidak tersedia (larangan mengarang rujukan kurikulum). |
 | `scripts/regen_dataset.py` | Regenerasi Dataset | Menghasilkan ulang CSV runtime dari sheet `Materi` workbook sumber, memulihkan `Relevansi Jurusan/Karir`, dan membuang baris SMK kejuruan. |
+| `scripts/deploy_vps.sh` | VPS Deployment Script | Skrip deployment berbasis release + symlink di VPS dengan zero-downtime, shared state (`.env`, `feedback_history.json`), smoke test, auto-rollback, dan pruning release lama. |
 | `chatbot.py` | Study Assistant Chatbot | Chatbot interaktif ramah siswa SMP/SMA/SMK. Memanfaatkan riwayat chat (6 putaran terakhir) + konteks tugas aktif siswa, serta mengembalikan klasifikasi aksi (`reschedule`, `focus`, `null`). |
 | `feedback.py` | Feedback Analytics Engine | Menyimpan riwayat akurasi ke `DATA/feedback_history.json` secara atomik (`.tmp -> replace`). Menghitung rasio akurasi batch dan historis per mata pelajaran untuk feedback loop prediktor. |
 | `app.py` | Local Test Interface | Web dashboard lokal berbasis Flask untuk visualisasi interaktif skor tugas, slot kosong, dan perbandingan jadwal AI vs Fallback (`http://127.0.0.1:5000`). |
@@ -76,7 +77,7 @@ Dokumen ini adalah **Source of Truth** utama bagi AI Agent maupun developer yang
   - `DATA/kurikulum_merdeka.xlsx`: Salinan byte-identik workbook sumber; rujukan audit, tidak dibaca runtime.
   - `DATA/silabus_awal.csv`: Cadangan lama Fase F; hanya dibaca bila CSV utama tidak ada.
   - `DATA/feedback_history.json`: Penyimpanan rekam jejak akurasi materi berbasis file JSON atomik.
-- **Testing**: **Pytest** (148 unit & integration test cases, 100% offline).
+- **Testing**: **Pytest** (186 unit & integration test cases, 100% offline).
 
 ---
 
@@ -233,7 +234,7 @@ Semua AI Agent yang mengedit atau membuat file di codebase ini **WAJIB** mematuh
   ```bash
   venv/bin/pytest -v
   ```
-  Seluruh 148 test cases (atau lebih) harus berstatus **PASSED**.
+  Seluruh 186 test cases (atau lebih) harus berstatus **PASSED**.
 
 ---
 
@@ -248,9 +249,11 @@ Repository ini memiliki dokumentasi arsitektur dan operasional mendalam di folde
    - Audit commit git backend Go, skema arsitektur single VPS (komunikasi loopback 127.0.0.1:8000), dan detail perubahan struct `ai_controllers.go`.
 3. **[`docs/DEPLOY_AI_1_VPS.md`](./docs/DEPLOY_AI_1_VPS.md)**:
    - Panduan deployment production di VPS Linux Ubuntu/Debian menggunakan Systemd service unit (`stoodify-ai-1.service`) dan Uvicorn.
-4. **[`docs/TODO_AI_AUTO_SCHEDULE.md`](./docs/TODO_AI_AUTO_SCHEDULE.md)**:
+4. **[`docs/CI_CD_DEPLOY.md`](./docs/CI_CD_DEPLOY.md)**:
+   - Panduan CI/CD otomatis via GitHub Actions (`.github/workflows/ci-cd.yml`) & script deploy VPS (`scripts/deploy_vps.sh`) dengan skema release symlink dan auto-rollback.
+5. **[`docs/TODO_AI_AUTO_SCHEDULE.md`](./docs/TODO_AI_AUTO_SCHEDULE.md)**:
    - Status checklist MVP auto-scheduling, penanganan `existing_sessions[].locked`, target latensi p95 < 5 detik, dan pengujian idempotensi.
-5. **[`contoh_payload.json`](./contoh_payload.json)**:
+6. **[`contoh_payload.json`](./contoh_payload.json)**:
    - Payload JSON acuan dari backend Go untuk pengujian manual endpoint `/schedule`.
 
 ---
@@ -260,7 +263,7 @@ Repository ini memiliki dokumentasi arsitektur dan operasional mendalam di folde
 Gunakan virtual environment yang sudah tersedia di direktori `venv/`:
 
 ```bash
-# 1. Menjalankan seluruh test suite otomatis (148 tests)
+# 1. Menjalankan seluruh test suite otomatis (186 tests)
 venv/bin/pytest -v
 
 # 2. Menjalankan production HTTP service (FastAPI di port 8000)

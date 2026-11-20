@@ -7,7 +7,7 @@ Engine kecerdasan buatan terpadu Stoodify:
 
 Jadwal dan prediksi materi diproses oleh **LLM OpenAI-compatible** (Groq, Google Gemini via OpenAI-endpoint, OpenAI, OpenRouter, Ollama) atau, jika AI offline/timeout/tanpa key, oleh **fallback deterministik**.
 
-Repo ini menyediakan service HTTP untuk backend (FastAPI di `service.py`), halaman uji lokal (Flask di `app.py`), dan test suite otomatis (182 test cases). Terhubung ke backend Go melalui endpoint `POST /schedule`, `POST /predict`, dan `POST /feedback` dengan autentikasi `Bearer <AI_API_KEY>`.
+Repo ini menyediakan service HTTP untuk backend (FastAPI di `service.py`), halaman uji lokal (Flask di `app.py`), test suite otomatis (186 test cases), serta pipeline **CI/CD GitHub Actions** dengan script deploy otomatis berbasis release + symlink ke VPS Linux (lihat [`docs/CI_CD_DEPLOY.md`](./docs/CI_CD_DEPLOY.md)). Terhubung ke backend Go melalui endpoint `POST /schedule`, `POST /predict`, dan `POST /feedback` dengan autentikasi `Bearer <AI_API_KEY>`.
 
 ## Fitur
 
@@ -43,14 +43,18 @@ stoodify-ai-1/
 ├── predictor.py          # Alur prediksi materi (LLM + fallback)
 ├── predictor_data.py     # Dataset, alias mapel, baca_silabus()
 ├── predictor_prompts.py  # Template prompt LLM (silabus ada/tidak ada)
-├── scripts/regen_dataset.py  # Regenerasi CSV runtime dari workbook sumber
+├── scripts/
+│   ├── regen_dataset.py   # Regenerasi CSV runtime dari workbook sumber
+│   └── deploy_vps.sh      # Script deployment otomatis ke VPS (release + symlink)
+├── .github/
+│   └── workflows/ci-cd.yml # GitHub Actions CI/CD (test + deploy)
 ├── feedback.py           # Evaluasi metrik feedback akurasi materi
 ├── adapter.py            # Adaptasi payload backend Go <-> struktur engine
 ├── service.py            # Service FastAPI (POST /schedule, /predict, /feedback)
 ├── validator.py          # Validasi output LLM dan aturan jadwal
 ├── llm.py                # Integrasi LLM (OpenAI-compatible)
 ├── app.py                # Flask (halaman uji)
-├── tests/                # Test suite pytest (182 test cases, offline)
+├── tests/                # Test suite pytest (186 test cases, offline)
 ├── .env.example          # Contoh konfigurasi environment
 ├── pytest.ini
 └── requirements.txt

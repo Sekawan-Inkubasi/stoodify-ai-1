@@ -1,0 +1,141 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Satu deploy/uji per ref; push baru membatalkan run lama di ref yang sama.
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  test:
+    name: pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile check
+        run: python -m compileall -q .
+
+      - name: Run test suite
+        env:
+          # Pastikan tidak ada key LLM nyata; suite wajib 100% offline.
+          LLM_API_KEY: ""
+          LLM_BASE_URL: ""
+          LLM_MODEL: ""
+          AI_API_KEY: ""
+        run: python -m pytest -v
+
+      - name: Verify deploy script syntax
+        run: bash -n scripts/deploy_vps.sh
+
+  deploy:
+    name: Deploy ke VPS
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release tarball
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz --prefix=stoodify-ai-1/ -o "$RUNNER_TEMP/release.tar.gz" HEAD
+          tar -tzf "$RUNNER_TEMP/release.tar.gz" | grep -qx 'stoodify-ai-1/service.py'
+          ls -lh "$RUNNER_TEMP/release.tar.gz"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ vars.VPS_PORT || '20220' }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          if [ -n "${VPS_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" > ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload release artifact
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ vars.VPS_PORT || '20220' }}
+          APP_ROOT: ${{ vars.APP_ROOT }}
+        run: |
+          set -euo pipefail
+          : "${APP_ROOT:?variabel APP_ROOT belum diisi di repository settings}"
+          REMOTE_TARBALL="/tmp/stoodify-ai-1-${GITHUB_SHA}.tar.gz"
+          ssh -i ~/.ssh/id_deploy -p "$VPS_PORT" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$VPS_USER@$VPS_HOST" "mkdir -p '$APP_ROOT/releases'"
+          scp -i ~/.ssh/id_deploy -P "$VPS_PORT" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            "$RUNNER_TEMP/release.tar.gz" "$VPS_USER@$VPS_HOST:$REMOTE_TARBALL"
+          echo "REMOTE_TARBALL=$REMOTE_TARBALL" >> "$GITHUB_ENV"
+
+      - name: Run deploy script on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ vars.VPS_PORT || '20220' }}
+          APP_ROOT: ${{ vars.APP_ROOT }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME || 'stoodify-ai' }}
+          HEALTH_URL: ${{ vars.HEALTH_URL || 'http://127.0.0.1:8888/health' }}
+        run: |
+          set -euo pipefail
+          REMOTE_ENV=$(printf 'APP_ROOT=%q RELEASE_ID=%q TARBALL=%q SERVICE_NAME=%q HEALTH_URL=%q' \
+            "$APP_ROOT" "$GITHUB_SHA" "$REMOTE_TARBALL" "$SERVICE_NAME" "$HEALTH_URL")
+          ssh -i ~/.ssh/id_deploy -p "$VPS_PORT" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
+            "$VPS_USER@$VPS_HOST" "export $REMOTE_ENV; bash -s" \
+            < scripts/deploy_vps.sh
+
+      - name: Post-deploy report
+        if: always()
+        run: |
+          {
+            echo "## Deploy stoodify-ai-1"
+            echo ""
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Target: \`${{ vars.APP_ROOT }}\`"
+            echo "- Service: \`${{ vars.SERVICE_NAME || 'stoodify-ai' }}\`"
+            echo "- Status: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
