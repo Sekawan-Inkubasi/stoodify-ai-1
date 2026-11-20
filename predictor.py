@@ -15,6 +15,15 @@ from llm import _call_with_timeout, call_llm, get_api_key, get_timeout
 
 log = logging.getLogger("stoodify.predictor")
 
+
+def _baca_akurasi(subject: str) -> dict:
+    """Lazy wrapper baca akurasi historis untuk menghindari circular import."""
+    try:
+        from feedback import baca_akurasi_per_mapel  # noqa: PLC0415
+        return baca_akurasi_per_mapel(subject)
+    except Exception:
+        return {}
+
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "DATA"
 KURIKULUM_MERDEKA_PATH = DATA_DIR / "kurikulum_merdeka.csv"
@@ -505,10 +514,26 @@ def fallback_prediction(
     silabus: Optional[List[Dict[str, Any]]] = None,
     class_level: str = "",
 ) -> Dict[str, Any]:
-    """Fallback deterministik ketika LLM offline, timeout, atau API key belum disetel."""
+    """Fallback deterministik ketika LLM offline, timeout, atau API key belum disetel.
+
+    Confidence dasar disesuaikan dengan akurasi historis prediksi mata pelajaran yang sama:
+    - Jika akurasi historis ≥ 70%  → confidence tidak dikurangi (terpercaya)
+    - Jika akurasi historis < 50%  → confidence dikurangi 10 poin (perlu hati-hati)
+    - Belum ada data               → confidence tidak disesuaikan
+    """
     history = task_history or []
     sil = silabus if silabus is not None else baca_silabus(subject, class_level=class_level)
-    return cari_topik_berikutnya(subject, history, sil, class_level=class_level)
+    hasil = cari_topik_berikutnya(subject, history, sil, class_level=class_level)
+
+    # Sesuaikan confidence berdasarkan akurasi historis
+    akurasi_info = _baca_akurasi(subject)
+    akurasi_pct = akurasi_info.get("akurasi")
+    if akurasi_pct is not None and "confidence" in hasil:
+        if akurasi_pct < 50.0:
+            hasil["confidence"] = max(0.0, hasil["confidence"] - 10.0)
+        # Jika ≥ 70%, biarkan confidence apa adanya (sudah terpercaya)
+
+    return hasil
 
 
 def build_prediction_prompt(
@@ -534,6 +559,19 @@ def build_prediction_prompt(
         for s in silabus[:25]
     ]
 
+    # Sertakan akurasi historis agar LLM tahu seberapa tepat prediksi sebelumnya
+    akurasi_info = _baca_akurasi(subject)
+    akurasi_total = akurasi_info.get("total", 0)
+    akurasi_pct = akurasi_info.get("akurasi")
+    if akurasi_total and akurasi_pct is not None:
+        akurasi_teks = (
+            f"CATATAN AKURASI HISTORIS ({subject}): "
+            f"{akurasi_pct:.1f}% dari {akurasi_total} prediksi sebelumnya dinilai tepat oleh siswa. "
+            f"{'Pertahankan pola prediksi saat ini.' if akurasi_pct >= 70 else 'Tingkatkan akurasi dengan mengikuti alur silabus lebih ketat.'}"
+        )
+    else:
+        akurasi_teks = f"CATATAN AKURASI HISTORIS ({subject}): Belum ada data feedback dari siswa."
+
     return f"""Kamu adalah AI pendidikan Stoodify yang bertugas memprediksi materi
 pembelajaran selanjutnya berdasarkan riwayat tugas siswa dan acuan silabus Kurikulum Merdeka.
 
@@ -548,6 +586,8 @@ TINGKAT KELAS:
 
 KURIKULUM:
 {curriculum if curriculum else "Kurikulum Merdeka"}
+
+{akurasi_teks}
 
 RIWAYAT TUGAS SISWA ({len(data_riwayat)} tugas tercatat):
 {json.dumps(data_riwayat, ensure_ascii=False, indent=2)}

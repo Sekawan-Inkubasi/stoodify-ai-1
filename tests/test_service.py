@@ -165,6 +165,43 @@ def test_feedback_endpoint(client):
     assert res["akurasi_feedback"] == 50.0
 
 
+def test_feedback_menyimpan_dan_akurasi_terbaca(client, tmp_path, monkeypatch):
+    """POST /feedback lalu GET /feedback/akurasi harus mengembalikan data yang sesuai."""
+    import feedback as fb_module
+    monkeypatch.setattr(fb_module, "FEEDBACK_HISTORY_PATH", tmp_path / "fb.json")
+
+    client.post("/feedback", json={"data_feedback": [
+        {"subject": "Fisika", "user_feedback": "accurate"},
+        {"subject": "Fisika", "user_feedback": "accurate"},
+        {"subject": "Fisika", "user_feedback": "inaccurate"},
+    ]}, headers=H)
+
+    r = client.get("/feedback/akurasi", headers=H)
+    assert r.status_code == 200
+    hasil = r.json()
+    assert "Fisika" in hasil
+    assert hasil["Fisika"]["total"] == 3
+    assert abs(hasil["Fisika"]["akurasi"] - 66.67) < 0.01
+
+
+def test_feedback_akurasi_filter_subject(client, tmp_path, monkeypatch):
+    """GET /feedback/akurasi?subject=Kimia hanya mengembalikan data Kimia."""
+    import feedback as fb_module
+    monkeypatch.setattr(fb_module, "FEEDBACK_HISTORY_PATH", tmp_path / "fb.json")
+
+    client.post("/feedback", json={"data_feedback": [
+        {"subject": "Kimia", "user_feedback": "accurate"},
+        {"subject": "Biologi", "user_feedback": "inaccurate"},
+    ]}, headers=H)
+
+    r = client.get("/feedback/akurasi?subject=Kimia", headers=H)
+    assert r.status_code == 200
+    hasil = r.json()
+    # Respons satu mapel: langsung dict, bukan nested
+    assert hasil["total"] == 1
+    assert hasil["akurasi"] == 100.0
+
+
 def test_schedule_dengan_locked_session_tidak_ditimpa(client):
     p = contoh_payload(existing_sessions=[
         {

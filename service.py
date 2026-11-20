@@ -18,7 +18,7 @@ from starlette.concurrency import run_in_threadpool
 
 from adapter import PayloadError, adapt_request, to_backend_sessions
 from chatbot import ai_chat
-from feedback import analisis_feedback, analisis_feedback_per_mapel
+from feedback import analisis_feedback, analisis_feedback_per_mapel, baca_akurasi_per_mapel, simpan_feedback
 from llm import ai_schedule, load_env
 from predictor import predict_material
 
@@ -153,10 +153,22 @@ async def chat_endpoint(payload: ChatPayload, authorization: str | None = Header
 @app.post("/feedback")
 async def feedback(payload: FeedbackPayload, authorization: str | None = Header(default=None)):
     check_auth(authorization)
+    # Simpan ke riwayat disk terlebih dahulu, lalu kembalikan analisis batch
+    await run_in_threadpool(simpan_feedback, payload.data_feedback)
     return analisis_feedback(payload.data_feedback)
 
 
 @app.post("/feedback/per-mapel")
 async def feedback_per_mapel(payload: FeedbackPayload, authorization: str | None = Header(default=None)):
     check_auth(authorization)
+    await run_in_threadpool(simpan_feedback, payload.data_feedback)
     return analisis_feedback_per_mapel(payload.data_feedback)
+
+
+@app.get("/feedback/akurasi")
+async def feedback_akurasi(subject: Optional[str] = None, authorization: str | None = Header(default=None)):
+    """Kembalikan akurasi historis prediksi dari DATA/feedback_history.json.
+    Query param ``subject`` opsional untuk filter per mata pelajaran.
+    """
+    check_auth(authorization)
+    return await run_in_threadpool(baca_akurasi_per_mapel, subject)
