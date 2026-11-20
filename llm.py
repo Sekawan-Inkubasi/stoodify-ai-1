@@ -47,12 +47,12 @@ def _env(*names, default=None):
 
 
 def get_timeout() -> float:
-    """Batas waktu total pemanggilan LLM. Backend menunggu 15 detik, jadi default 10 detik
+    """Batas waktu total pemanggilan LLM. Backend menunggu 15 detik, jadi default 6 detik
     agar jadwal fallback masih sempat dikirim balik."""
     try:
-        return float(os.getenv("AI_TIMEOUT_SECONDS", "10"))
+        return float(os.getenv("AI_TIMEOUT_SECONDS", "6"))
     except ValueError:
-        return 10.0
+        return 6.0
 
 
 def get_api_key():
@@ -100,11 +100,11 @@ SLOT KOSONG (satu-satunya waktu yang boleh dipakai):
 
 ATURAN WAJIB:
 1. Setiap sesi harus berada SEPENUHNYA di dalam satu slot kosong di atas, pada tanggal yang sama.
-2. Durasi sesi 15-{max(p["session_duration"], 45)} menit. Beri jeda minimal 10 menit antar sesi.
+2. Durasi sesi 15-{max(p["session_duration"], 45)} menit. Beri jeda minimal {p.get("break_duration", 10)} menit antar sesi.
 3. Sesi tidak boleh bertabrakan satu sama lain dan harus selesai sebelum deadline tugasnya
    (kecuali deadline sudah lewat: jadwalkan secepatnya).
 4. Total menit semua sesi satu tugas tidak boleh melebihi sisa_menit-nya.
-5. Tugas berskor tinggi dapat slot lebih awal. Maksimal 2 sesi per tugas per hari.
+5. Tugas berskor tinggi dapat slot lebih awal. Maksimal 2 sesi per tugas per hari. Maksimal total {p.get("max_sessions_per_day", 4)} sesi belajar per hari.
 6. target_progress = perkiraan persen progres tugas SETELAH sesi itu selesai (0-100, naik dari sesi ke sesi).
 7. reason: 1 kalimat bahasa Indonesia sederhana (maks 20 kata) yang menyebut alasan nyata
    (deadline, kesulitan, progres). Jangan memakai istilah teknis.

@@ -123,9 +123,21 @@ def adapt_request(payload, now=None):
     session_duration = _int(p.get("session_duration"), 0)
     if session_duration <= 0:
         session_duration = 60
+    break_duration = _int(p.get("break_duration"), 0)
+    if break_duration <= 0:
+        break_duration = 10
+    max_sessions_per_day = _int(p.get("max_sessions_per_day"), 0)
+    if max_sessions_per_day <= 0:
+        max_sessions_per_day = 4
     active = parse_active_days(p.get("active_days")) or DEFAULT_ACTIVE
-    prefs = {"start_time": p_start, "end_time": p_end,
-             "session_duration": session_duration, "active_days": active}
+    prefs = {
+        "start_time": p_start,
+        "end_time": p_end,
+        "session_duration": session_duration,
+        "break_duration": break_duration,
+        "max_sessions_per_day": max_sessions_per_day,
+        "active_days": active,
+    }
 
     # ---- tugas ----
     tasks, snoozed = [], 0
@@ -144,10 +156,13 @@ def adapt_request(payload, now=None):
             warnings.append(f'Tugas "{t.get("title", t["id"])}" tidak punya deadline valid, dilewati.')
             continue
         subject = t.get("subject")
+        subj_name = subject.get("name", "") if isinstance(subject, dict) else (str(subject) if subject else "")
+        if not subj_name:
+            warnings.append(f'Tugas "{t.get("title", t["id"])}" tidak memiliki mata pelajaran (subject).')
         tasks.append({
             "id": _int(t["id"], 0),
             "title": str(t.get("title") or "Tugas"),
-            "subject": subject.get("name", "") if isinstance(subject, dict) else "",
+            "subject": subj_name,
             "type": TYPE_MAP.get(str(t.get("type") or "").lower(), "tugas"),
             "deadline": deadline_at.date().isoformat(),
             "deadline_at": deadline_at,
@@ -202,11 +217,19 @@ def adapt_request(payload, now=None):
         a, dur = norm_hhmm(s.get("start_time")), _int(s.get("duration"), 0)
         if not (date_iso and a and dur > 0) or date_iso < today_iso:
             continue
-        end = min(to_min(a) + dur, 23 * 60 + 59)
-        activities.append({"date": date_iso, "start": a, "end": fmt(end), "title": "Sesi terjadwal"})
-        task = by_id.get(_int(s.get("task_id"), -1))
-        if task:
-            task["planned_min"] += dur
+        is_locked = s.get("locked") if s.get("locked") is not None else True
+        if is_locked:
+            end = min(to_min(a) + dur, 23 * 60 + 59)
+            activities.append({
+                "date": date_iso,
+                "start": a,
+                "end": fmt(end),
+                "title": "Sesi terkunci" if s.get("locked") else "Sesi terjadwal",
+                "locked": True,
+            })
+            task = by_id.get(_int(s.get("task_id"), -1))
+            if task:
+                task["planned_min"] += dur
 
     student = {"name": "Siswa", "preferences": prefs, "schedules": schedules,
                "activities": activities, "tasks": tasks}

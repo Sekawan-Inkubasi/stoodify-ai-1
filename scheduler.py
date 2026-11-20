@@ -8,14 +8,14 @@ MIN_SESSION = 20    # sesi terpendek yang masih masuk akal
 MAX_PER_TASK_PER_DAY = 2
 
 
-def make_chunks(slots, session_len):
+def make_chunks(slots, session_len, break_len=BREAK):
     chunks = []
     for s in slots:
         cur = s["start"]
         while s["end"] - cur >= MIN_SESSION:
             end = min(cur + session_len, s["end"])
             chunks.append({"date": s["date"], "start": cur, "end": end})
-            cur = end + BREAK
+            cur = end + break_len
     return chunks
 
 
@@ -45,9 +45,12 @@ def fallback_schedule(student, now: datetime, weights=None):
     scores = score_all(student["tasks"], now, weights)
     by_id = {t["id"]: t for t in student["tasks"]}
     session_len = student["preferences"]["session_duration"]
-    chunks = make_chunks(find_free_slots(student, now), session_len)
+    break_len = student["preferences"].get("break_duration", BREAK)
+    max_sessions_daily = student["preferences"].get("max_sessions_per_day", 4)
+    chunks = make_chunks(find_free_slots(student, now), session_len, break_len)
     used = set()
     sessions, warnings = [], []
+    total_per_day = {}
 
     # tugas yang sudah lewat deadline didahulukan, sisanya urut skor
     ordered = sorted(scores, key=lambda x: (x["days_left"] > 0, -x["score"]))
@@ -64,6 +67,8 @@ def fallback_schedule(student, now: datetime, weights=None):
             if need <= 0:
                 break
             if i in used:
+                continue
+            if total_per_day.get(c["date"], 0) >= max_sessions_daily:
                 continue
             c_end = datetime.strptime(f"{c['date']} {fmt(c['end'])}", "%Y-%m-%d %H:%M")
             if not overdue and c_end > dl_dt:
@@ -84,6 +89,7 @@ def fallback_schedule(student, now: datetime, weights=None):
             })
             used.add(i)
             per_day[c["date"]] = per_day.get(c["date"], 0) + 1
+            total_per_day[c["date"]] = total_per_day.get(c["date"], 0) + 1
             need -= length
         if need > 0:
             warnings.append(f"Waktu tidak cukup untuk \"{task['title']}\": "

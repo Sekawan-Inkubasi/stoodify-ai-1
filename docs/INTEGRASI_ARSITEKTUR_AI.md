@@ -59,11 +59,11 @@ main-arch/
   2. Autentikasi JWT ganda (Access Token 15 menit, Refresh Token 7 hari dengan single-use rotation).
   3. Background worker scheduler via goroutine (`workers.JalankanScheduler`) untuk mendeteksi tugas terlambat (status `late`) dan membuat notifikasi H-1 serta H-0.
   4. AI Bridge (`controllers/ai_controllers.go`):
-     - `POST /api/ai/schedule-recommendations/generate`: Mengambil data tugas aktif dan preferensi siswa, memanggil `AI_SCHEDULER_URL`, lalu menyimpan hasil ke tabel `study_sessions`. Jika gagal atau timeout 15 detik, mengeksekusi `fallbackSlots` lokal.
-     - `POST /api/ai/material-predictions/generate`: Mengambil 10 riwayat tugas terakhir untuk mata pelajaran tertentu, memanggil `AI_PREDICTOR_URL`, lalu menyimpan ke tabel `material_predictions`. Jika gagal, mengeksekusi `fallbackPrediction` lokal.
-- **Kesiapan Integrasi & Celah Eksisting:**
-  1. Arsitektur AI bridge di backend sudah mengadopsi pola pemanggilan HTTP terpisah dengan timeout 15 detik dan fallback rule-based lokal.
-  2. **Kesenjangan Data AI-1:** Fungsi `panggilAIScheduler` di Go saat ini hanya mengirimkan `user_id`, `date`, `preferences`, dan `tasks`. Backend belum menyertakan `schedules` (jadwal sekolah), `activities` (kegiatan rutin), dan `existing_sessions` (sesi belajar yang sudah direncanakan). Akibatnya, `stoodify-ai-1` mengeluarkan warning dan tidak dapat memblokir jam sekolah secara akurat.
+     - `POST /api/ai/schedule-recommendations/generate`: Mengambil data tugas aktif dan preferensi siswa, memanggil `AI_SCHEDULER_URL`, lalu menyimpan hasil ke tabel `study_sessions`. Backend bertindak sebagai bridge-only (ADR-005) dan sepenuhnya mengandalkan AI Engine (termasuk fallback internal engine jika LLM lambat/gagal).
+     - `POST /api/ai/material-predictions/generate`: Mengambil 10 riwayat tugas terakhir untuk mata pelajaran tertentu, memanggil `AI_PREDICTOR_URL`, lalu menyimpan ke tabel `material_predictions`.
+- **Kesiapan Integrasi:**
+  1. Arsitektur AI bridge di backend mengadopsi pola pemanggilan HTTP terpusat dengan timeout 15 detik.
+  2. **Pengiriman Data AI-1:** Backend telah mengirimkan array lengkap `schedules` (jadwal sekolah), `activities` (kegiatan rutin), dan `existing_sessions` (sesi belajar yang sudah direncanakan, termasuk flag `locked`) sejak commit `b88bdd0`.
   3. **Ketidaksesuaian Kontrak AI-2:** Struct `hasilPrediksi` di Go mengharapkan respons JSON flat:
      ```json
      {
@@ -157,14 +157,48 @@ Berikut adalah diagram alur data end-to-end integrasi fitur AI ke dalam ekosiste
 ```
 
 ### Rincian Alur Komunikasi:
-1. **Inisiasi Klien:** Pengguna menekan tombol "Generate Jadwal" atau "Prediksi Materi" di antarmuka `stoodify-mobile`.
-2. **Autentikasi & Pengambilan Konteks:** `stoodify-backend` memvalidasi JWT pengguna, lalu membaca seluruh konteks yang relevan dari PostgreSQL:
-   - Untuk Jadwal: Data tugas aktif, preferensi belajar, jadwal pelajaran sekolah, kegiatan rutin, dan sesi belajar terjadwal yang sudah ada.
-   - Untuk Prediksi Materi: Data mata pelajaran dan 10 riwayat tugas terakhir.
+1. **Inisiasi Sistem/Pengguna:** Backend memanggil `/schedule` secara **otomatis** setiap ada perubahan tugas siswa (debounce + single-flight), maupun saat pengguna meminta penjadwalan ulang.
+2. **Autentikasi & Pengambilan Konteks:** `stoodify-backend` membaca seluruh konteks yang relevan dari PostgreSQL:
+   - Untuk Jadwal: Data tugas aktif, preferensi belajar (termasuk `session_duration`, `break_duration`, `max_sessions_per_day`), jadwal pelajaran sekolah, kegiatan rutin, dan sesi belajar terjadwal yang sudah ada (`existing_sessions`, termasuk penanda `locked`).
+   - Untuk Prediksi Materi: Data mata pelajaran, 10 riwayat tugas terakhir, `class_level`, dan `curriculum`.
 3. **Pendelegasian ke AI Service:** Backend membuat panggilan HTTP POST ke engine AI terkait dengan header `Authorization: Bearer <AI_API_KEY>`.
 4. **Resiliensi & Fallback:**
-   - Jika AI Engine merespons dalam batas waktu 15 detik: Hasil divalidasi dan disimpan ke database dengan tanda `ai_generated = true` (atau sumber `ai`).
-   - Jika AI Engine gagal, timeout, atau menghasilkan format tidak valid: Backend secara otomatis menjalankan fallback internal (`fallbackSlots` atau `fallbackPrediction`) tanpa menghentikan alur aplikasi. Pengguna tetap menerima jadwal atau estimasi topik dengan catatan sumber `fallback rule-based`.
+   - Jika AI Engine merespons: Hasil disimpan ke database dengan tanda sumber `source` (`ai` atau `fallback`).
+   - Engine AI secara internal menangani degradasi fallback jika LLM offline, quota limit (429), atau latensi melebihi batas (~6 detik), sehingga selalu mengembalikan HTTP 200 dengan `source: "fallback"` dan `fallback_reason`. Backend tidak lagi menjalankan fallback manual lokal (ADR-005).
+
+### 2.1 Ringkasan Kontrak v1 & Penanganan Auto-Schedule
+
+#### A. Sifat Pemanggilan: Otomatis, Stateless, & Idempoten
+Backend memanggil endpoint `/schedule` secara **otomatis** setiap ada perubahan tugas siswa (debounce + single-flight).
+- **Stateless:** Engine tidak menyimpan state antar-request dalam memori; seluruh kalkulasi bergantung murni pada payload yang dikirim backend.
+- **Idempoten:** Pemanggilan berulang dengan payload yang sama selalu menghasilkan alokasi sesi yang konsisten dan bebas dari memory leak.
+
+#### B. Penanganan Sesi `locked` pada `existing_sessions`
+Backend mengirimkan riwayat sesi yang sudah ada dengan penanda `locked`:
+```json
+{
+  "session_id": 91,
+  "task_id": 12,
+  "session_date": "2026-11-18",
+  "start_time": "16:00",
+  "duration": 60,
+  "status": "planned",
+  "locked": true
+}
+```
+- **`locked: true`**: Sesi milik user atau terlalu dekat untuk digeser. Engine menganggapnya sebagai blok waktu sibuk (seperti jadwal sekolah) dan **tidak akan menaruh sesi baru di atas rentang waktu tersebut**, serta memperhitungkan progres `planned_min` tugas terkait.
+- **`locked: false`**: Sesi draft yang belum dikunci. Slot ini **tidak memblokir jadwal** dan dapat dialokasikan ulang oleh auto-scheduler.
+
+#### C. Penanganan Preferensi Belajar Siswa
+- `session_duration`: Durasi target setiap sesi belajar (default: 60 menit).
+- `break_duration`: Jeda istirahat minimum antar sesi belajar (default: 10 menit).
+- `max_sessions_per_day`: Batas maksimal sesi belajar yang dialokasikan dalam satu hari (default: 4 sesi/hari).
+
+#### D. Status HTTP yang Diharapkan
+- **`200 OK`**: Penjadwalan berhasil dibuat. Field `source` berisi `"ai"` jika berhasil via LLM, atau `"fallback"` jika terjadi timeout/kuota habis. Jika fallback aktif, field `fallback_reason` menjelaskan penyebab degradasi tanpa menyebabkan error HTTP 500.
+- **`401 Unauthorized`**: Token Bearer `AI_API_KEY` tidak cocok atau tidak disertakan.
+- **`422 Unprocessable Entity`**: Format payload JSON tidak memenuhi skema adapter.
+- **`503 Service Unavailable`**: `AI_API_KEY` belum dikonfigurasi di environment engine.
 
 ---
 
@@ -280,7 +314,7 @@ Implementasi integrasi dibagi menjadi 5 fase berurutan dengan kriteria dependens
   1. Menyiapkan environment deployment (Railway/Render/Docker) dengan variabel `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, dan `AI_API_KEY`.
   2. Memastikan endpoint `GET /health` dan `POST /schedule` merespons dalam < 10 detik.
 - **Kriteria Penerimaan (Acceptance Criteria):**
-  - Request `POST /api/ai/schedule-recommendations/generate` di backend menghasilkan respons `201 Created` dengan pesan `rekomendasi sesi belajar dibuat (ai)`.
+  - Request `POST /api/ai/schedule-recommendations/generate` di backend menghasilkan respons `201 Created` dengan pesan `rekomendasi sesi belajar dibuat`.
   - Data sesi tersimpan di tabel `study_sessions` PostgreSQL dengan `ai_generated = true`.
 
 ### Fase 2: Standarisasi dan Pembungkusan Service `stoodify-ai-2`

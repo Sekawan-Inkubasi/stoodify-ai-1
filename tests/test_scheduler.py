@@ -119,3 +119,39 @@ def test_data_acak_berseed_memenuhi_semua_aturan():
         st = make_student(tasks=tasks, schedules=schedules, activities=activities,
                           session_duration=rnd.choice([30, 45, 60]))
         check_invariants(st)
+
+
+def test_fallback_schedule_menghormati_break_dan_max_sessions():
+    st = make_student(
+        tasks=[
+            make_task(id=1, duration=300, deadline="2026-10-15", difficulty=3),
+            make_task(id=2, duration=300, deadline="2026-10-15", difficulty=4),
+        ],
+        schedules=[],
+        activities=[],
+        session_duration=45,
+    )
+    # Set max 2 sesi per hari dan break 20 menit
+    st["preferences"]["max_sessions_per_day"] = 2
+    st["preferences"]["break_duration"] = 20
+
+    res = fallback_schedule(st, NOW)
+    sessions = res["sessions"]
+    assert sessions
+
+    # Hitung jumlah sesi per tanggal
+    from collections import Counter
+    per_date = Counter(s["date"] for s in sessions)
+    for date, count in per_date.items():
+        assert count <= 2, f"Tanggal {date} melebihi batas 2 sesi: {count}"
+
+    # Cek jeda antar sesi pada tanggal yang sama minimal 20 menit
+    by_date = {}
+    for s in sessions:
+        by_date.setdefault(s["date"], []).append(s)
+    for date, day_sessions in by_date.items():
+        if len(day_sessions) > 1:
+            for i in range(len(day_sessions) - 1):
+                gap = to_min(day_sessions[i+1]["start_time"]) - to_min(day_sessions[i]["end_time"])
+                assert gap >= 20, f"Jeda pada {date} kurang dari 20 menit: {gap}"
+

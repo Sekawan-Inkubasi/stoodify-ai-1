@@ -159,3 +159,67 @@ def test_contoh_payload_json_sinkron_dan_bisa_dipakai():
         data = json.load(f)
     assert data == contoh_payload()
     assert adapt_request(data)[0]["tasks"]
+
+
+def test_existing_sessions_locked_true_memblokir_slot():
+    sesi_locked = {
+        "task_id": 3,
+        "session_date": "2026-10-06",
+        "start_time": "16:00",
+        "duration": 60,
+        "status": "planned",
+        "locked": True,
+    }
+    student, now, _, _ = adapt(existing_sessions=[sesi_locked], schedules=[])
+    # Slot 16:00-17:00 harus terblokir di activities
+    assert any(a.get("locked") and a["start"] == "16:00" and a["end"] == "17:00" for a in student["activities"])
+    slots = find_free_slots(student, now)
+    for s in slots:
+        if s["date"] == "2026-10-06":
+            assert not (s["start"] < to_min("17:00") and to_min("16:00") < s["end"])
+
+
+def test_existing_sessions_locked_false_tidak_memblokir_slot():
+    sesi_unlocked = {
+        "task_id": 3,
+        "session_date": "2026-10-06",
+        "start_time": "16:00",
+        "duration": 60,
+        "status": "planned",
+        "locked": False,
+    }
+    student, now, _, _ = adapt(existing_sessions=[sesi_unlocked], schedules=[])
+    # Slot 16:00-17:00 TIDAK boleh masuk activities
+    assert not any(a.get("locked") for a in student["activities"])
+    # planned_min untuk task 3 tidak bertambah karena sesi belum locked
+    assert by_id(student)[3]["planned_min"] == 0
+
+
+def test_task_tanpa_subject_memberi_peringatan_dan_tetap_jalan():
+    tugas_tanpa_mapel = {
+        "id": 99,
+        "title": "Tugas Umum",
+        "deadline": "2026-10-07T00:00:00Z",
+        "difficulty": 3,
+        "estimated_duration": 60,
+        "progress": 0,
+        "subject": None,
+    }
+    student, _, warnings, _ = adapt(tasks=[tugas_tanpa_mapel])
+    assert any(t["id"] == 99 for t in student["tasks"])
+    assert any("tidak memiliki mata pelajaran" in w for w in warnings)
+
+
+def test_preferensi_break_duration_dan_max_sessions():
+    p = {
+        "start_time": "15:00",
+        "end_time": "21:00",
+        "session_duration": 45,
+        "break_duration": 15,
+        "max_sessions_per_day": 3,
+    }
+    student, _, _, _ = adapt(preferences=p)
+    prefs = student["preferences"]
+    assert prefs["break_duration"] == 15
+    assert prefs["max_sessions_per_day"] == 3
+

@@ -1,0 +1,72 @@
+﻿No,Jenjang,Kelas / Fase,Mata Pelajaran,Status,Keterangan,Kelas Min,Kelas Maks,Jumlah Topik di Materi,Data Materi
+1,SD,Fase A-C (Kelas 1-6),Pendidikan Agama dan Budi Pekerti,Wajib,,1,6,50,Ada
+2,SD,Fase A-C (Kelas 1-6),Pendidikan Pancasila,Wajib,,1,6,24,Ada
+3,SD,Fase A-C (Kelas 1-6),Bahasa Indonesia,Wajib,,1,6,48,Ada
+4,SD,Fase A-C (Kelas 1-6),Matematika,Wajib,,1,6,47,Ada
+5,SD,Fase A-C (Kelas 1-6),Ilmu Pengetahuan Alam dan Sosial (IPAS),Wajib,Gabungan IPA dan IPS,1,6,32,Ada
+6,SD,Fase A-C (Kelas 1-6),Seni dan Budaya,Wajib,"Seni Rupa, Musik, Tari, atau Teater",1,6,54,Ada
+7,SD,Fase A-C (Kelas 1-6),Pendidikan Jasmani Olahraga dan Kesehatan (PJOK),Wajib,,1,6,34,Ada
+8,SD,Fase A-C (Kelas 1-6),Bahasa Inggris,Opsional,Tergantung kebijakan sekolah,1,6,36,Ada
+9,SD,Fase A-C (Kelas 1-6),Muatan Lokal,Wajib/Daerah,Sesuai kearifan lokal daerah,1,6,0,Belum ada data
+10,SMP,Fase D (Kelas 7-9),Pendidikan Agama dan Budi Pekerti,Wajib,,7,9,24,Ada
+11,SMP,Fase D (Kelas 7-9),Pendidikan Pancasila,Wajib,,7,9,12,Ada
+12,SMP,Fase D (Kelas 7-9),Bahasa Indonesia,Wajib,,7,9,22,Ada
+13,SMP,Fase D (Kelas 7-9),Matematika,Wajib,,7,9,26,Ada
+14,SMP,Fase D (Kelas 7-9),Bahasa Inggris,Wajib,,7,9,17,Ada
+15,SMP,Fase D (Kelas 7-9),Ilmu Pengetahuan Alam (IPA),Wajib,,7,9,0,Belum ada data
+16,SMP,Fase D (Kelas 7-9),Ilmu Pengetahuan Sosial (IPS),Wajib,,7,9,0,Belum ada data
+17,SMP,Fase D (Kelas 7-9),Informatika,Wajib,Menjadi mapel wajib di SMP,7,9,0,Belum ada data
+18,SMP,Fase D (Kelas 7-9),Seni dan Budaya,Wajib,,7,9,0,Belum ada data
+19,SMP,Fase D (Kelas 7-9),Pendidikan Jasmani Olahraga dan Kesehatan (PJOK),Wajib,,7,9,0,Belum ada data
+20,SMP,Fase D (Kelas 7-9),Prakarya dan Kewirausahaan,Wajib,,7,9,0,Belum ada data
+21,SMP,Fase D (Kelas 7-9),Muatan Lokal,Wajib/Daerah,Sesuai kearifan lokal daerah,7,9,0,Belum ada data
+22,SMA,Fase E (Kelas 10),Pendidikan Agama dan Budi Pekerti,Wajib,Masih umum untuk semua siswa,10,10,8,Ada
+23,SMA,Fase E (Kelas 10),Pendidikan Pancasila,Wajib,Masih umum untuk semua siswa,10,10,4,Ada
+24,SMA,Fase E (Kelas 10),Bahasa Indonesia,Wajib,Masih umum untuk semua siswa,10,10,6,Ada
+25,SMA,Fase E (Kelas 10),Matematika,Wajib,Masih umum untuk semua siswa,10,10,7,Ada
+26,SMA,Fase E (Kelas 10),Bahasa Inggris,Wajib,Masih umum untuk semua siswa,10,10,5,Ada
+27,SMA,Fase E (Kelas 10),Ilmu Pengetahuan Alam (IPA),Wajib,Masih umum untuk semua siswa,10,10,0,Belum ada data
+28,SMA,Fase E (Kelas 10),Ilmu Pengetahuan Sosial (IPS),Wajib,Masih umum untuk semua siswa,10,10,0,Belum ada data
+29,SMA,Fase E (Kelas 10),Sejarah,Wajib,,10,10,7,Ada
+30,SMA,Fase E (Kelas 10),Seni dan Budaya,Wajib,,10,10,12,Ada
+31,SMA,Fase E (Kelas 10),Pendidikan Jasmani Olahraga dan Kesehatan (PJOK),Wajib,,10,10,8,Ada
+32,SMA,Fase E (Kelas 10),Informatika,Wajib,,10,10,8,Ada
+33,SMA,Fase E (Kelas 10),Muatan Lokal,Wajib/Daerah,Sesuai kearifan lokal daerah,10,10,0,Belum ada data
+34,SMA,Fase F (Kelas 11-12),Pendidikan Agama dan Budi Pekerti,Wajib,Mapel Wajib Kelas 11-12,11,12,16,Ada
+35,SMA,Fase F (Kelas 11-12),Pendidikan Pancasila,Wajib,Mapel Wajib Kelas 11-12,11,12,8,Ada
+36,SMA,Fase F (Kelas 11-12),Bahasa Indonesia,Wajib,Mapel Wajib Kelas 11-12,11,12,12,Ada
+37,SMA,Fase F (Kelas 11-12),Bahasa Inggris,Wajib,Mapel Wajib Kelas 11-12,11,12,13,Ada
+38,SMA,Fase F (Kelas 11-12),Matematika,Wajib,Mapel Wajib Kelas 11-12,11,12,16,Ada
+39,SMA,Fase F (Kelas 11-12),Pendidikan Jasmani Olahraga dan Kesehatan (PJOK),Wajib,Mapel Wajib Kelas 11-12,11,12,16,Ada
+40,SMA,Fase F (Kelas 11-12),Sejarah,Wajib,Mapel Wajib Kelas 11-12,11,12,7,Ada
+41,SMA,Fase F (Kelas 11-12),Seni dan Budaya,Wajib,Mapel Wajib Kelas 11-12,11,12,20,Ada
+42,SMA,Fase F (Kelas 11-12),Fisika,Pilihan,Kelompok MIPA; data materi mencakup Kelas 10-12,10,12,20,Ada
+43,SMA,Fase F (Kelas 11-12),Kimia,Pilihan,Kelompok MIPA; data materi mencakup Kelas 10-12,10,12,16,Ada
+44,SMA,Fase F (Kelas 11-12),Biologi,Pilihan,Kelompok MIPA; data materi mencakup Kelas 10-12,10,12,26,Ada
+45,SMA,Fase F (Kelas 11-12),Matematika Tingkat Lanjut,Pilihan,Kelompok MIPA,11,12,10,Ada
+46,SMA,Fase F (Kelas 11-12),Sosiologi,Pilihan,Kelompok IPS; data materi mencakup Kelas 10-12,10,12,12,Ada
+47,SMA,Fase F (Kelas 11-12),Ekonomi,Pilihan,Kelompok IPS; data materi mencakup Kelas 10-12,10,12,17,Ada
+48,SMA,Fase F (Kelas 11-12),Geografi,Pilihan,Kelompok IPS; data materi mencakup Kelas 10-12,10,12,15,Ada
+49,SMA,Fase F (Kelas 11-12),Antropologi,Pilihan,Kelompok IPS,11,12,12,Ada
+50,SMA,Fase F (Kelas 11-12),Bahasa & Sastra Indonesia Tingkat Lanjut,Pilihan,Kelompok Bahasa,11,12,10,Ada
+51,SMA,Fase F (Kelas 11-12),Bahasa & Sastra Inggris Tingkat Lanjut,Pilihan,Kelompok Bahasa,11,12,10,Ada
+52,SMA,Fase F (Kelas 11-12),Bahasa Asing Lainnya,Pilihan,"Mandarin, Jepang, Jerman, Arab, dll.",11,12,0,Belum ada data
+53,SMA,Fase F (Kelas 11-12),Informatika,Pilihan,Dapat diambil sebagai pilihan,11,12,16,Ada
+54,SMK,Fase E & F (Kelas 10-12),Pendidikan Agama dan Budi Pekerti,Wajib,Mata Pelajaran Umum,10,12,14,Ada
+55,SMK,Fase E & F (Kelas 10-12),Pendidikan Pancasila,Wajib,Mata Pelajaran Umum,10,12,11,Ada
+56,SMK,Fase E & F (Kelas 10-12),Bahasa Indonesia,Wajib,Mata Pelajaran Umum,10,12,15,Ada
+57,SMK,Fase E & F (Kelas 10-12),Matematika,Wajib,Mata Pelajaran Umum,10,12,15,Ada
+58,SMK,Fase E & F (Kelas 10-12),Bahasa Inggris,Wajib,Mata Pelajaran Umum,10,12,14,Ada
+59,SMK,Fase E & F (Kelas 10-12),Sejarah,Wajib,Mata Pelajaran Umum,10,12,6,Ada
+60,SMK,Fase E & F (Kelas 10-12),Seni dan Budaya,Wajib,Mata Pelajaran Umum,10,12,4,Ada
+61,SMK,Fase E & F (Kelas 10-12),Pendidikan Jasmani Olahraga dan Kesehatan (PJOK),Wajib,Mata Pelajaran Umum,10,12,9,Ada
+62,SMK,Fase E & F (Kelas 10-12),Informatika,Wajib,Mata Pelajaran Umum,10,12,8,Ada
+63,SMK,Fase E (Kelas 10),Ilmu Pengetahuan Alam dan Sosial (IPAS),Wajib,Mata Pelajaran Umum (Khusus Kelas 10),10,10,7,Ada
+64,SMK,Fase E & F (Kelas 10-12),Muatan Lokal,Wajib/Daerah,Mata Pelajaran Umum,10,12,0,Belum ada data
+65,SMK,Fase E & F (Kelas 10-12),Dasar Program Keahlian,Wajib,Mata Pelajaran Kejuruan (Bervariasi),10,12,0,Belum ada data
+66,SMK,Fase E & F (Kelas 10-12),Konsentrasi Keahlian,Wajib,Mata Pelajaran Kejuruan (Bervariasi),10,12,0,Belum ada data
+67,SMK,Fase E & F (Kelas 10-12),Projek Kreatif dan Kewirausahaan,Wajib,Mata Pelajaran Kejuruan,10,12,9,Ada
+68,SEMUA,Semua Fase,Projek Penguatan Profil Pelajar Pancasila (P5),Wajib (Non-Akademik),Kegiatan lintas mapel untuk pengembangan karakter,,,0,Belum ada data
+69,SMK,Fase E & F (Kelas 10-12),Pengembangan Perangkat Lunak dan Gim (PPLG),Wajib,Konsentrasi keahlian (ditambahkan dari data materi),10,12,15,Ada
+70,SMK,Fase E & F (Kelas 10-12),Teknik Jaringan Komputer dan Telekomunikasi (TJKT),Wajib,Konsentrasi keahlian (ditambahkan dari data materi),10,12,15,Ada
+71,SMK,Fase F (Kelas 12),Praktik Kerja Lapangan (PKL),Wajib,Kejuruan (ditambahkan dari data materi),12,12,5,Ada

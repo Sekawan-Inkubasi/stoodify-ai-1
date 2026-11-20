@@ -164,3 +164,50 @@ def test_feedback_endpoint(client):
     assert res["total_feedback"] == 2
     assert res["akurasi_feedback"] == 50.0
 
+
+def test_schedule_dengan_locked_session_tidak_ditimpa(client):
+    p = contoh_payload(existing_sessions=[
+        {
+            "id": 99,
+            "task_id": 1,
+            "session_date": "2026-10-06",
+            "start_time": "15:00",
+            "duration": 60,
+            "status": "planned",
+            "locked": True,
+        }
+    ])
+    r = client.post("/schedule", json=p, headers=H)
+    assert r.status_code == 200
+    sesi = r.json()["sessions"]
+    # Tidak ada sesi baru yang tumpang tindih dengan 15:00-16:00 pada 2026-10-06
+    for s in sesi:
+        if s["recommended_date"] == "2026-10-06":
+            assert not (s["start_time"] < "16:00" and s["end_time"] > "15:00")
+
+
+def test_schedule_5x_idempoten_tanpa_kebocoran_state(client):
+    p = contoh_payload()
+    hasil_pertama = client.post("/schedule", json=p, headers=H).json()
+    assert hasil_pertama["sessions"]
+    for _ in range(4):
+        ulang = client.post("/schedule", json=p, headers=H).json()
+        assert len(ulang["sessions"]) == len(hasil_pertama["sessions"])
+        assert [s["task_id"] for s in ulang["sessions"]] == [s["task_id"] for s in hasil_pertama["sessions"]]
+
+
+def test_schedule_llm_429_kembali_200_fallback(client, monkeypatch):
+    def throw_429(prompt):
+        raise RuntimeError("429 Too Many Requests: quota exceeded")
+
+    monkeypatch.setenv("LLM_API_KEY", "palsu")
+    monkeypatch.setattr(llm, "call_llm", throw_429)
+
+    r = client.post("/schedule", json=contoh_payload(), headers=H)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "fallback"
+    assert "429" in body["fallback_reason"]
+    assert len(body["sessions"]) > 0
+
+
