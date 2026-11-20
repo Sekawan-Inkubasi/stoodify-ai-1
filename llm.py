@@ -196,7 +196,8 @@ def ai_schedule(student, now: datetime, weights=None, call_fn=None,
 
     scores = base["scores"]
     last_deadline = max((s["deadline"] for s in scores if s["days_left"] > 0), default=None)
-    slots = [s for s in find_free_slots(student, now)
+    horizon = student["preferences"].get("horizon_days", 7)
+    slots = [s for s in find_free_slots(student, now, days_ahead=horizon)
              if last_deadline is None or s["date"] <= last_deadline][:60]
     if not scores or not slots:
         return use_fallback("tidak ada tugas atau slot kosong, AI tidak dipanggil")

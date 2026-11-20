@@ -223,3 +223,61 @@ def test_preferensi_break_duration_dan_max_sessions():
     assert prefs["break_duration"] == 15
     assert prefs["max_sessions_per_day"] == 3
 
+
+# ---- horizon days ----
+
+def test_days_default_tujuh():
+    """Tanpa parameter days → default horizon 7 hari."""
+    student, _, _, meta = adapt()
+    assert student["preferences"]["horizon_days"] == 7
+    assert meta["horizon_days"] == 7
+
+
+def test_days_dari_payload_root():
+    """Parameter days di root payload dibaca dan diklem 1–14."""
+    student, _, _, meta = adapt_request(contoh_payload(days=3))
+    assert student["preferences"]["horizon_days"] == 3
+    assert meta["horizon_days"] == 3
+
+
+def test_days_dari_preferences():
+    """Parameter days bisa juga ada di dalam preferences."""
+    p = {"start_time": "15:00", "end_time": "21:00", "session_duration": 45, "days": 5}
+    student, _, _, meta = adapt(preferences=p)
+    assert student["preferences"]["horizon_days"] == 5
+    assert meta["horizon_days"] == 5
+
+
+def test_days_maks_diklem_14():
+    """days=20 diklem ke 14."""
+    student, _, _, meta = adapt_request(contoh_payload(days=20))
+    assert student["preferences"]["horizon_days"] == 14
+    assert meta["horizon_days"] == 14
+
+
+def test_days_min_diklem_1():
+    """days=0 diklem ke 1."""
+    student, _, _, meta = adapt_request(contoh_payload(days=0))
+    assert student["preferences"]["horizon_days"] == 1
+    assert meta["horizon_days"] == 1
+
+
+def test_days_1_slot_hanya_hari_pertama():
+    """Dengan days=1 → find_free_slots hanya mengembalikan slot hari target."""
+    from slots import find_free_slots
+    student, now, _, _ = adapt_request(contoh_payload(days=1))
+    slots = find_free_slots(student, now, days_ahead=student["preferences"]["horizon_days"])
+    target_date = now.date().isoformat()
+    for s in slots:
+        assert s["date"] == target_date, f"Slot {s['date']} di luar hari target {target_date}"
+
+
+def test_days_7_slot_lintas_seminggu():
+    """Dengan days=7 → slot tersebar di multiple hari (lebih dari 1)."""
+    from slots import find_free_slots
+    # Gunakan now = Senin 08:00 agar banyak hari yang masuk
+    student, now, _, _ = adapt_request(contoh_payload(days=7, now="2026-10-05T08:00:00+07:00"))
+    slots = find_free_slots(student, now, days_ahead=7)
+    dates = {s["date"] for s in slots}
+    assert len(dates) > 1, "Dengan horizon 7 hari seharusnya ada slot di lebih dari 1 hari"
+

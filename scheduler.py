@@ -47,7 +47,8 @@ def fallback_schedule(student, now: datetime, weights=None):
     session_len = student["preferences"]["session_duration"]
     break_len = student["preferences"].get("break_duration", BREAK)
     max_sessions_daily = student["preferences"].get("max_sessions_per_day", 4)
-    chunks = make_chunks(find_free_slots(student, now), session_len, break_len)
+    horizon = student["preferences"].get("horizon_days", 7)
+    chunks = make_chunks(find_free_slots(student, now, days_ahead=horizon), session_len, break_len)
     used = set()
     sessions, warnings = [], []
     total_per_day = {}

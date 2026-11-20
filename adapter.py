@@ -129,6 +129,9 @@ def adapt_request(payload, now=None):
     max_sessions_per_day = _int(p.get("max_sessions_per_day"), 0)
     if max_sessions_per_day <= 0:
         max_sessions_per_day = 4
+    # horizon hari: 1–14, default 7. Bisa datang dari preferences.days atau payload.days
+    raw_days = payload.get("days") if "days" in payload else p.get("days")
+    horizon_days = min(max(_int(raw_days, 7), 1), 14)
     active = parse_active_days(p.get("active_days")) or DEFAULT_ACTIVE
     prefs = {
         "start_time": p_start,
@@ -136,6 +139,7 @@ def adapt_request(payload, now=None):
         "session_duration": session_duration,
         "break_duration": break_duration,
         "max_sessions_per_day": max_sessions_per_day,
+        "horizon_days": horizon_days,
         "active_days": active,
     }
 
@@ -233,7 +237,8 @@ def adapt_request(payload, now=None):
 
     student = {"name": "Siswa", "preferences": prefs, "schedules": schedules,
                "activities": activities, "tasks": tasks}
-    meta = {"date": target.date().isoformat(), "snoozed_skipped": snoozed, "tasks_used": len(tasks)}
+    meta = {"date": target.date().isoformat(), "snoozed_skipped": snoozed, "tasks_used": len(tasks),
+            "horizon_days": horizon_days}
     return student, start_now, warnings, meta
 
 

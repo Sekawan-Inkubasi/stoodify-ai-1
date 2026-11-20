@@ -89,6 +89,7 @@ async def schedule(request: Request, authorization: str | None = Header(default=
         "fallback_reason": result.get("fallback_reason"),
         "model": result.get("model"),
         "latency_ms": latency,
+        "horizon_days": meta["horizon_days"],
     }
 
 

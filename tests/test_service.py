@@ -211,3 +211,29 @@ def test_schedule_llm_429_kembali_200_fallback(client, monkeypatch):
     assert len(body["sessions"]) > 0
 
 
+def test_schedule_respons_mengandung_horizon_days_default(client):
+    """Response /schedule harus mengandung horizon_days (default 7)."""
+    r = client.post("/schedule", json=contoh_payload(), headers=H)
+    assert r.status_code == 200
+    body = r.json()
+    assert "horizon_days" in body
+    assert body["horizon_days"] == 7
+
+
+def test_schedule_days_dikembalikan_di_respons(client):
+    """Jika payload mengandung days=3, respons horizon_days == 3."""
+    p = contoh_payload()
+    p["days"] = 3
+    r = client.post("/schedule", json=p, headers=H)
+    assert r.status_code == 200
+    assert r.json()["horizon_days"] == 3
+
+
+def test_schedule_days_lebih_dari_14_diklem(client):
+    """days=99 diklem ke 14 dan dikembalikan di respons."""
+    p = contoh_payload()
+    p["days"] = 99
+    r = client.post("/schedule", json=p, headers=H)
+    assert r.status_code == 200
+    assert r.json()["horizon_days"] == 14
+
