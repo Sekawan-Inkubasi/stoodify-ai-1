@@ -171,3 +171,40 @@ def test_baca_akurasi_mapel_belum_ada(tmp_path, monkeypatch):
     assert hasil["total"] == 0
     assert hasil["akurasi"] is None
 
+
+def test_normalisasi_alias_subject_konsisten(tmp_path, monkeypatch):
+    """Alias seperti 'mtk' dan 'Matematika' harus tersimpan dan terbaca di key baku yang sama."""
+    import feedback as fb_module
+    monkeypatch.setattr(fb_module, "FEEDBACK_HISTORY_PATH", tmp_path / "fb.json")
+
+    simpan_feedback([
+        {"subject": "mtk", "user_feedback": "accurate"},
+        {"subject": "MTK", "user_feedback": "inaccurate"},
+        {"subject": "Matematika", "user_feedback": "accurate"},
+    ])
+
+    hasil_baku = baca_akurasi_per_mapel("Matematika")
+    hasil_alias = baca_akurasi_per_mapel("mtk")
+    assert hasil_baku == hasil_alias
+    assert hasil_baku["total"] == 3
+    assert hasil_baku["benar"] == 2
+    assert hasil_baku["salah"] == 1
+
+
+def test_simpan_feedback_konkuren_aman(tmp_path, monkeypatch):
+    """Penulisan feedback paralel dari banyak thread tidak boleh korupsi atau kehilangan hitungan."""
+    from concurrent.futures import ThreadPoolExecutor
+    import feedback as fb_module
+
+    monkeypatch.setattr(fb_module, "FEEDBACK_HISTORY_PATH", tmp_path / "fb.json")
+
+    def worker(_):
+        simpan_feedback([{"subject": "Fisika", "user_feedback": "accurate"}])
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        list(ex.map(worker, range(24)))
+
+    hasil = baca_akurasi_per_mapel("Fisika")
+    assert hasil["total"] == 24
+    assert hasil["benar"] == 24
+

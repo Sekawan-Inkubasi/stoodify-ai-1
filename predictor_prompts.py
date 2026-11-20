@@ -105,6 +105,29 @@ Catatan: confidence harus berupa angka antara 0.0 sampai 1.0. Jangan sertakan fi
 syllabus_reference; sistem menandainya otomatis."""
 
 
+MAX_HISTORY_ITEMS = 20
+_FIELD_MAX_CHARS = {
+    "nama_tugas": 150,
+    "materi": 150,
+    "deskripsi": 300,
+    "catatan": 200,
+}
+
+
+def _ringkas_riwayat(data_riwayat: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Batasi jumlah dan panjang teks riwayat tugas agar prompt LLM tetap terkendali."""
+    terbaru = data_riwayat[-MAX_HISTORY_ITEMS:]
+    ringkas: List[Dict[str, Any]] = []
+    for item in terbaru:
+        salinan = dict(item)
+        for field, max_len in _FIELD_MAX_CHARS.items():
+            val = salinan.get(field)
+            if isinstance(val, str) and len(val) > max_len:
+                salinan[field] = val[:max_len].rstrip() + "..."
+        ringkas.append(salinan)
+    return ringkas
+
+
 def _ringkas_silabus(silabus: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Ambil maksimal 25 topik pertama silabus untuk konteks prompt."""
     return [
@@ -156,6 +179,7 @@ def build_prediction_prompt(
     yang tidak diberikan.
     """
     ringkasan = _ringkas_silabus(silabus)
+    riwayat_ringkas = _ringkas_riwayat(data_riwayat)
     jenjang_bagian = " ".join(p for p in (jenjang.strip(), class_level.strip()) if p)
     jenjang_teks = jenjang_bagian or "Kurikulum Merdeka"
 
@@ -165,8 +189,8 @@ def build_prediction_prompt(
         "difficulty_teks": difficulty if difficulty is not None else "Tidak tersedia",
         "curriculum_teks": curriculum or "Kurikulum Merdeka",
         "akurasi_teks": _teks_akurasi(subject, akurasi_info or {}),
-        "jumlah_riwayat": len(data_riwayat),
-        "riwayat_json": json.dumps(data_riwayat, ensure_ascii=False, indent=2),
+        "jumlah_riwayat": len(riwayat_ringkas),
+        "riwayat_json": json.dumps(riwayat_ringkas, ensure_ascii=False, indent=2),
         "jumlah_silabus": len(ringkasan),
         "silabus_json": json.dumps(ringkasan, ensure_ascii=False, indent=2),
     }

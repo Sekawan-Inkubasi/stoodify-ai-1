@@ -3,9 +3,10 @@
 Menggabungkan retrieval silabus Kurikulum Merdeka (`predictor_data`), prompt LLM
 (`predictor_prompts`), dan fallback deterministik.
 
-Cakupan silabus runtime: seluruh SD/SMP/SMA dan mata pelajaran umum SMK. Mapel
-kejuruan SMK tidak ada di dataset sehingga silabusnya kosong dan prediksinya
-diarahkan ke LLM (atau fallback generik yang jujur saat LLM gagal).
+Cakupan silabus runtime: seluruh SMA (337 baris) dan mata pelajaran umum SMK
+(103 baris). Baris SD/SMP dan mapel kejuruan SMK tidak ada di dataset runtime
+sehingga silabusnya kosong dan prediksinya diarahkan ke LLM (atau fallback
+generik yang jujur saat LLM gagal).
 """
 import json
 import logging

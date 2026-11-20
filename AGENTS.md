@@ -43,15 +43,15 @@ Dokumen ini adalah **Source of Truth** utama bagi AI Agent maupun developer yang
 | `priority.py` | Priority Scoring Formula | Menghitung skor tugas (0–100) dari 5 parameter berbobot: Deadline (40%), Difficulty (20%), Duration (15%), Importance (15%), Late Risk (10%), dengan penyesuaian diskon progres `(1 - 0.85 * progress / 100)`. |
 | `slots.py` | Free Time-Slot Finder | Mencari slot waktu belajar kosong dalam rentang horizon (default 14 hari) dengan mengurangkan jam sekolah, kegiatan rutin, dan sesi terkunci (`locked: true`) dari jam belajar preferensi siswa. |
 | `scheduler.py` | Deterministic Fallback | Penjadwal greedy deterministik lokal tanpa AI. Menghormati jeda `break_duration` (default 10 mnt), batas `max_sessions_per_day` (default 4), dan maks 2 sesi per tugas/hari. Menghasilkan alasan pengerjaan berbasis fakta. |
-| `llm.py` | Multi-LLM Orchestrator | Memanggil provider OpenAI-compatible (`/chat/completions`). Mendukung multi-model fallback, in-memory cache SHA256 (TTL 10 menit), auto-retry 429/503, dan timeout kontrol (`AI_TIMEOUT_SECONDS`). |
-| `validator.py` | Output Verification | Validasi skema output LLM menggunakan Pydantic v2 (`LlmOutput`). Memastikan sesi berada dalam slot kosong, sebelum deadline, tidak bentrok, dan alokasi durasi wajar. Jika >50% sesi melanggar, otomatis jatuh ke fallback. |
+| `llm.py` | Multi-LLM Orchestrator | Memanggil provider OpenAI-compatible (`/chat/completions`). Mendukung multi-model fallback, in-memory cache SHA256 terbatas (`CACHE_MAX_SIZE=256`, TTL 10 menit + eviksi otomatis), auto-retry 429/5xx, dan timeout kontrol (`AI_TIMEOUT_SECONDS`). |
+| `validator.py` | Output Verification | Validasi skema output LLM menggunakan Pydantic v2 (`SessionOut`). Memastikan sesi berada dalam slot kosong, sebelum deadline, tidak bentrok, dan alokasi durasi wajar. Jika >50% sesi melanggar, otomatis jatuh ke fallback. |
 | `predictor.py` | Material & Topic Predictor | Alur prediksi: retrieval silabus berfilter jenjang, panggilan LLM, fallback deterministik. Prediksi topik berikutnya memakai `No. Urut + 1` bila silabus tersedia. |
 | `predictor_data.py` | Sumber Data Silabus | Pemuatan `DATA/kurikulum_merdeka.csv` (cache in-memory), `MAPEL_ALIASES`, `normalize_class_level()`, `resolve_jenjang()`, dan `baca_silabus()` berfilter jenjang/kelas/jalur/kurikulum. |
-| `predictor_prompts.py` | Template Prompt Prediktor | Dua varian prompt: silabus tersedia (alur `No. Urut + 1`) dan silabus tidak tersedia (larangan mengarang rujukan kurikulum). |
+| `predictor_prompts.py` | Template Prompt Prediktor | Dua varian prompt: silabus tersedia (alur `No. Urut + 1`) dan silabus tidak tersedia (larangan mengarang rujukan kurikulum), dengan pembatasan panjang riwayat (`MAX_HISTORY_ITEMS=20`) dan panjang teks per field. |
 | `scripts/regen_dataset.py` | Regenerasi Dataset | Menghasilkan ulang CSV runtime dari sheet `Materi` workbook sumber, memulihkan `Relevansi Jurusan/Karir`, dan membuang baris SMK kejuruan. |
 | `scripts/deploy_vps.sh` | VPS Deployment Script | Skrip deployment berbasis release + symlink di VPS dengan zero-downtime, shared state (`.env`, `feedback_history.json`), smoke test, auto-rollback, dan pruning release lama. |
-| `chatbot.py` | Study Assistant Chatbot | Chatbot interaktif ramah siswa SMP/SMA/SMK. Memanfaatkan riwayat chat (6 putaran terakhir) + konteks tugas aktif siswa, serta mengembalikan klasifikasi aksi (`reschedule`, `focus`, `null`). |
-| `feedback.py` | Feedback Analytics Engine | Menyimpan riwayat akurasi ke `DATA/feedback_history.json` secara atomik (`.tmp -> replace`). Menghitung rasio akurasi batch dan historis per mata pelajaran untuk feedback loop prediktor. |
+| `chatbot.py` | Study Assistant Chatbot | Chatbot interaktif ramah siswa SMP/SMA/SMK. Memvalidasi role riwayat ketat (`user`/`assistant` saja, menolak `system`/role lain), memakai batas timeout total (`AI_TIMEOUT_SECONDS`), retry hanya pada error sibuk 429/5xx, fallback non-JSON mode, dan klasifikasi aksi (`reschedule`, `focus`, `null`). |
+| `feedback.py` | Feedback Analytics Engine | Menyimpan riwayat akurasi ke `DATA/feedback_history.json` secara thread-safe (`_FILE_LOCK`) dan atomik (`NamedTemporaryFile -> os.replace`) dengan normalisasi alias mapel (`MAPEL_ALIASES`). Menghitung rasio akurasi batch dan historis per mata pelajaran untuk feedback loop prediktor. |
 | `app.py` | Local Test Interface | Web dashboard lokal berbasis Flask untuk visualisasi interaktif skor tugas, slot kosong, dan perbandingan jadwal AI vs Fallback (`http://127.0.0.1:5000`). |
 | `data.py` | Dummy Testing Dataset | Dataset dummy lokal (siswa, jadwal sekolah, kegiatan rutin, tugas) untuk keperluan pengujian offline dan demo Flask. |
 
@@ -77,7 +77,7 @@ Dokumen ini adalah **Source of Truth** utama bagi AI Agent maupun developer yang
   - `DATA/kurikulum_merdeka.xlsx`: Salinan byte-identik workbook sumber; rujukan audit, tidak dibaca runtime.
   - `DATA/silabus_awal.csv`: Cadangan lama Fase F; hanya dibaca bila CSV utama tidak ada.
   - `DATA/feedback_history.json`: Penyimpanan rekam jejak akurasi materi berbasis file JSON atomik.
-- **Testing**: **Pytest** (186 unit & integration test cases, 100% offline).
+- **Testing**: **Pytest** (206 unit & integration test cases, 100% offline).
 
 ---
 
@@ -158,10 +158,9 @@ Dokumen ini adalah **Source of Truth** utama bagi AI Agent maupun developer yang
 **Routing mapel tanpa silabus:** bila `baca_silabus()` mengembalikan hasil kosong
 (mata pelajaran kejuruan SMK atau mapel di luar dataset), LLM **tetap dipanggil**
 dengan riwayat tugas dan konteks yang diizinkan, tetapi prompt melarang klaim
-rujukan kurikulum. Kegagalan provider tidak menghasilkan HTTP 500; fallback
-deterministik mengembalikan `syllabus_reference: "unavailable"` dengan confidence
-rendah. Nama lengkap siswa, catatan pribadi, dan deskripsi rahasia tetap tidak
-dikirim ke LLM (lihat 6.4).
+rujukan kurikulum. Kegagalan provider tidak menghasilkan HTTP 500; fallback deterministik
+mengembalikan `syllabus_reference: "unavailable"` dengan confidence rendah.
+Batasan data yang dikirim ke LLM per endpoint dijelaskan di bagian 6.4.
 
 ### 5.3 Alur Endpoint `/chat` (Conversational Assistant)
 ```
@@ -170,9 +169,9 @@ dikirim ke LLM (lihat 6.4).
        ▼
 [chatbot.py] -> ai_chat()
   ├── Susun prompt persona asisten belajar siswa Indonesia
-  ├── Suntikkan konteks siswa (nama, kelas, sekolah, tugas aktif)
-  ├── Gabungkan 6 putaran riwayat percakapan terakhir
-  ├── Panggil LLM dengan response_format JSON
+  ├── Suntikkan konteks siswa (nama, kelas, sekolah, maks 5 tugas aktif)
+  ├── Gabungkan maks 6 putaran riwayat percakapan terakhir (role allowlist: user/assistant saja)
+  ├── Panggil LLM dalam batas AI_TIMEOUT_SECONDS (retry hanya 429/5xx, fallback non-JSON mode)
   └── Klasifikasikan output:
         ├── action: "reschedule" (jika butuh susun ulang jadwal)
         ├── action: "focus" (jika butuh timer fokus Pomodoro)
@@ -218,8 +217,9 @@ Semua AI Agent yang mengedit atau membuat file di codebase ini **WAJIB** mematuh
 - Panggilan `/schedule` berkali-kali dengan payload yang sama harus menghasilkan alokasi jadwal yang konsisten dan stabil.
 
 ### 6.4 Sanitasi Data & Privasi Siswa (Data Minimization)
-- **Nama lengkap siswa, deskripsi rahasia tugas, dan catatan pribadi siswa DILARANG dikirim ke LLM publik**.
-- Cukup kirim judul tugas, tipe tugas, tingkat kesulitan, estimasi durasi, deadline, dan progres.
+- **`/schedule` (`llm.py`)**: Tidak mengirim nama siswa, `description`, maupun `notes` tugas ke LLM; hanya mengirim judul tugas, jenis, tingkat kesulitan, estimasi durasi, deadline, dan progres.
+- **`/predict` (`predictor.py`, `predictor_prompts.py`)**: Mengirim riwayat tugas terstruktur (maksimal 20 tugas terbaru) termasuk `deskripsi` (dipotong maks 300 karakter) dan `catatan` (dipotong maks 200 karakter) untuk mendukung inferensi topik secara akurat. Tidak mengirim nama siswa.
+- **`/chat` (`chatbot.py`)**: Mengirim konteks personal yang diberikan backend (`student_name`, `grade`/`class_level`, `school`, maksimal 5 tugas aktif) serta maksimal 6 putaran riwayat percakapan yang telah disanitasi (hanya role `user` dan `assistant` yang diizinkan; role seperti `system`/`developer`/`tool` dibuang).
 
 ### 6.5 Konvensi Kode Python
 - Gunakan type annotations lengkap pada parameter fungsi dan return value (`typing`: `List`, `Dict`, `Optional`, `Tuple`, `Any`).

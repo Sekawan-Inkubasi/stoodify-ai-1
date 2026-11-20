@@ -204,3 +204,19 @@ def test_default_base_url_openai_dan_kompatibel_key_gemini_lama(monkeypatch):
     assert llm.get_base_url() == llm.DEFAULT_BASE_URL
     monkeypatch.setenv("GEMINI_API_KEY", "k")
     assert llm.get_base_url() == llm.GEMINI_BASE_URL and llm.get_api_key() == "k"
+
+
+def test_cache_terbatas_dan_eviksi_entri_lama(monkeypatch):
+    monkeypatch.setattr(llm, "CACHE_MAX_SIZE", 3)
+    llm._cache.clear()
+    for i in range(5):
+        llm._cache_set(f"k{i}", f"v{i}")
+    assert len(llm._cache) == 3
+    assert set(llm._cache.keys()) == {"k2", "k3", "k4"}
+
+
+def test_cache_hapus_entri_kedaluwarsa(monkeypatch):
+    llm._cache.clear()
+    llm._cache["lama"] = (time.time() - llm.CACHE_TTL - 5, "nilai-lama")
+    assert llm._cache_get("lama") is None
+    assert "lama" not in llm._cache

@@ -285,3 +285,30 @@ def test_tanpa_kelas_dan_jenjang_tidak_mencampur_sma_smk():
     silabus = baca_silabus("Matematika")
     assert silabus
     assert {s["jenjang"] for s in silabus} == {"SMA"}
+
+
+def test_build_prediction_prompt_membatasi_riwayat_dan_panjang_teks():
+    riwayat_besar = [
+        {
+            "nama_tugas": f"Tugas {i}",
+            "materi": f"Topik {i}",
+            "deskripsi": "x" * 600,
+            "catatan": "y" * 400,
+            "tanggal": f"2026-10-{i:02d}",
+        }
+        for i in range(1, 31)
+    ]
+    prompt = build_prediction_prompt(
+        subject="Matematika",
+        difficulty=3,
+        data_riwayat=riwayat_besar,
+        silabus=[],
+    )
+    # Hanya 20 riwayat terbaru yang masuk prompt (Tugas 11..30), Tugas 1 tidak ikut
+    assert "(20 tugas tercatat)" in prompt
+    assert '"Tugas 30"' in prompt
+    assert '"Tugas 11"' in prompt
+    assert '"Tugas 1"' not in prompt
+    # Deskripsi & catatan panjang dipotong agar tidak meledakkan token
+    assert "x" * 350 not in prompt
+    assert "y" * 250 not in prompt

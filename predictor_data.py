@@ -5,11 +5,12 @@ kelas, dan pembacaan silabus dari alur prediksi di `predictor.py`.
 
 Dataset runtime `DATA/kurikulum_merdeka.csv` dihasilkan oleh
 `scripts/regen_dataset.py` dari workbook `Kurikulum_Merdeka_Gabungan_Sempurna.xlsx`
-dan HANYA berisi:
-- seluruh baris SD, SMP, dan SMA;
-- baris SMK untuk mata pelajaran umum.
+dan HANYA berisi (440 baris):
+- seluruh baris SMA (337 baris);
+- baris SMK untuk mata pelajaran umum (103 baris).
 
-Materi kejuruan SMK sengaja tidak ada di runtime; prediksinya diarahkan ke LLM.
+Baris SD/SMP dan materi kejuruan SMK sengaja tidak ada di runtime; prediksinya
+diarahkan ke LLM (atau fallback generik yang jujur saat LLM gagal).
 """
 import csv
 import logging
@@ -154,7 +155,8 @@ def resolve_jenjang(class_str: str, jenjang: str = "") -> str:
     - Tanpa `jenjang` pada kelas 10-12, default ke SMA agar payload lama
       tidak mencampur baris SMA dan SMK.
     - Kelas 1-9 diinferensikan dari angka kelas (SD/SMP) supaya filter tetap konsisten.
-    - Selain itu kosong (tanpa filter jenjang, seperti perilaku sebelumnya).
+    - Bila `class_level` dan `jenjang` sama-sama kosong/tidak dikenali, default ke SMA
+      agar baris SMA dan SMK tidak pernah tercampur.
     """
     explicit = (jenjang or "").strip().upper()
     if explicit:

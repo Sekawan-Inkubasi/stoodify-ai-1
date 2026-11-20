@@ -159,17 +159,19 @@ Nama siswa tidak dikirim ke LLM. Hasil AI yang sukses di-cache 10 menit untuk me
 python -m pytest -v
 ```
 
-Ada 182 tes, tanpa internet dan tanpa API key (LLM diganti tiruan):
+Ada 206 tes, tanpa internet dan tanpa API key (LLM diganti tiruan):
 
 | File | Isi |
 |---|---|
 | `tests/test_priority.py` | 17 skenario prioritas (deadline, kesulitan, progres, jenis tugas, late risk, bobot, dll.) |
 | `tests/test_slots.py` | Slot tidak menabrak jadwal, batas jam, hari nonaktif, slot pendek |
 | `tests/test_scheduler.py` | Aturan jadwal pada data buatan dan 150 siswa acak berseed |
-| `tests/test_llm.py` | JSON rusak, sesi melanggar aturan, timeout, error API, retry 503, pindah model, cache |
+| `tests/test_llm.py` | JSON rusak, sesi melanggar aturan, timeout, error API, retry 503, pindah model, cache & eviksi |
 | `tests/test_adapter.py` | Pemetaan data backend: jenis tugas, hari, zona waktu, tugas selesai/ditunda, sesi lama, data opsional hilang |
 | `tests/test_service.py` | Autentikasi bearer, format balasan, fallback, timeout, privasi prompt, field `jenjang` dan validasi 422 |
-| `tests/test_predictor.py` | Filter jenjang, alias mapel, jalur vokasi tanpa silabus, fallback aman |
+| `tests/test_predictor.py` | Filter jenjang, alias mapel, jalur vokasi tanpa silabus, batas panjang riwayat, fallback aman |
+| `tests/test_chatbot.py` | Validasi role allowlist (anti role-injection), parsing action, timeout/fallback, retry 503 vs 4xx, endpoint `/chat` |
+| `tests/test_feedback.py` | Akumulasi feedback, normalisasi alias mapel, concurrency safety, akurasi historis |
 | `tests/test_dataset.py` | Header, jumlah baris 440, hanya SMA+SMK, batas mapel kejuruan SMK |
 
 Tes prioritas mengecek aturan (urutan dan logika), bukan angka persis, sehingga tidak ikut rusak saat bobot dikalibrasi.
@@ -212,8 +214,10 @@ uvicorn service:app --port 8000
 | `GET /health` | Cek status service (tanpa autentikasi) |
 | `POST /schedule` | Penjadwalan cerdas belajar adaptif (`AI_SCHEDULER_URL`) |
 | `POST /predict` | Prediksi materi Kurikulum Merdeka (`AI_PREDICTOR_URL`) |
-| `POST /feedback` | Evaluasi analitik feedback akurasi materi global |
-| `POST /feedback/per-mapel` | Evaluasi analitik feedback akurasi per mata pelajaran |
+| `POST /chat` | Asisten belajar interaktif dengan deteksi aksi (`reschedule`/`focus`) |
+| `POST /feedback` | Simpan & evaluasi analitik feedback akurasi materi global |
+| `POST /feedback/per-mapel` | Simpan & evaluasi analitik feedback akurasi per mata pelajaran |
+| `GET /feedback/akurasi` | Baca akurasi historis prediksi dari `feedback_history.json` (opsional `?subject=`) |
 
 Pengaturan di `.env` engine dan backend:
 

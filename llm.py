@@ -20,7 +20,38 @@ DEFAULT_MODEL = "gpt-4o-mini"        # ganti lewat LLM_MODEL di .env
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"  # endpoint OpenAI-compatible milik Gemini
 CACHE_TTL = 600
+CACHE_MAX_SIZE = 256
 _cache = {}
+
+
+def _cache_evict(now_ts: float) -> None:
+    """Buang entri cache kedaluwarsa dan jaga ukuran cache tetap <= CACHE_MAX_SIZE."""
+    expired = [k for k, (ts, _) in _cache.items() if now_ts - ts >= CACHE_TTL]
+    for k in expired:
+        _cache.pop(k, None)
+    while len(_cache) >= CACHE_MAX_SIZE:
+        oldest_key = next(iter(_cache))
+        _cache.pop(oldest_key, None)
+
+
+def _cache_get(key: str) -> str | None:
+    """Ambil nilai cache jika belum kedaluwarsa; hapus jika sudah kedaluwarsa."""
+    cached = _cache.get(key)
+    if not cached:
+        return None
+    if time.time() - cached[0] < CACHE_TTL:
+        return cached[1]
+    _cache.pop(key, None)
+    return None
+
+
+def _cache_set(key: str, text: str) -> None:
+    """Simpan hasil ke cache dengan batas ukuran dan eviksi entri lama."""
+    now_ts = time.time()
+    if key in _cache:
+        _cache.pop(key, None)
+    _cache_evict(now_ts)
+    _cache[key] = (now_ts, text)
 
 DAY_ID = {"mon": "Senin", "tue": "Selasa", "wed": "Rabu", "thu": "Kamis",
           "fri": "Jumat", "sat": "Sabtu", "sun": "Minggu"}
@@ -210,10 +241,10 @@ def ai_schedule(student, now: datetime, weights=None, call_fn=None,
 
     prompt = build_prompt(student, now, scores, slots)
     key = hashlib.sha256((get_base_url() + "|" + ",".join(get_models()) + "|" + prompt).encode()).hexdigest()
-    cached = _cache.get(key) if use_cache else None
+    cached_text = _cache_get(key) if use_cache else None
     try:
-        if cached and time.time() - cached[0] < CACHE_TTL:
-            text = cached[1]
+        if cached_text is not None:
+            text = cached_text
         else:
             text = _call_with_timeout(call, prompt, timeout)
     except FutureTimeout:
@@ -232,7 +263,7 @@ def ai_schedule(student, now: datetime, weights=None, call_fn=None,
         return use_fallback("Terlalu banyak sesi dari LLM yang melanggar aturan: " + "; ".join(errors[:3]))
 
     if use_cache:
-        _cache[key] = (time.time(), text)
+        _cache_set(key, text)
 
     by_id = {t["id"]: t for t in student["tasks"]}
     prio = {s["task_id"]: s["priority"] for s in scores}
