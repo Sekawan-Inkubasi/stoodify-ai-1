@@ -20,7 +20,7 @@ Konteks: backend akan memanggil `/schedule` **otomatis** setiap ada perubahan tu
 ## 2. Keputusan kontrak yang perlu disepakati
 
 - [x] **`break_duration` & `max_sessions_per_day`**: Pilihan (a) diadopsi! `adapter.py` mem-parsing `break_duration` (default 10) dan `max_sessions_per_day` (default 4). `scheduler.py` menghormati jeda istirahat antar slot dan membatasi alokasi sesi harian. Prompt LLM di `llm.py` juga menyertakan kedua aturan ini.
-- [x] **`class_level` & `curriculum`** pada `/predict`: Didukung penuh via `normalize_class_level()` (menerima angka 1-12, romawi I-XII/XIII, atau Fase A-F) dan dataset Kurikulum Merdeka (910 topik).
+- [x] **`class_level` & `curriculum`** pada `/predict`: Didukung penuh via `normalize_class_level()` (menerima angka 1-12, romawi I-XII/XIII, atau Fase A-F) dan dataset Kurikulum Merdeka runtime (866 baris: SD/SMP/SMA + mapel umum SMK).
 - [x] **`activities[].day_of_week`**: Format `Monday..Sunday` dinormalisasi dengan baik oleh `norm_day` di `adapter.py:180`.
 
 ## 3. Fase lanjutan (belum dikerjakan backend)

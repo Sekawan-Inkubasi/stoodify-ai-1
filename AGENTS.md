@@ -45,7 +45,10 @@ Dokumen ini adalah **Source of Truth** utama bagi AI Agent maupun developer yang
 | `scheduler.py` | Deterministic Fallback | Penjadwal greedy deterministik lokal tanpa AI. Menghormati jeda `break_duration` (default 10 mnt), batas `max_sessions_per_day` (default 4), dan maks 2 sesi per tugas/hari. Menghasilkan alasan pengerjaan berbasis fakta. |
 | `llm.py` | Multi-LLM Orchestrator | Memanggil provider OpenAI-compatible (`/chat/completions`). Mendukung multi-model fallback, in-memory cache SHA256 (TTL 10 menit), auto-retry 429/503, dan timeout kontrol (`AI_TIMEOUT_SECONDS`). |
 | `validator.py` | Output Verification | Validasi skema output LLM menggunakan Pydantic v2 (`LlmOutput`). Memastikan sesi berada dalam slot kosong, sebelum deadline, tidak bentrok, dan alokasi durasi wajar. Jika >50% sesi melanggar, otomatis jatuh ke fallback. |
-| `predictor.py` | Material & Topic Predictor | RAG silabus Kurikulum Merdeka (910 topik). Normalisasi jenjang/kelas/fase, peta alias mapel (`MAPEL_ALIASES`), pencocokan riwayat tugas berskor, dan prediksi topik berikutnya (`No. Urut + 1`). |
+| `predictor.py` | Material & Topic Predictor | Alur prediksi: retrieval silabus berfilter jenjang, panggilan LLM, fallback deterministik. Prediksi topik berikutnya memakai `No. Urut + 1` bila silabus tersedia. |
+| `predictor_data.py` | Sumber Data Silabus | Pemuatan `DATA/kurikulum_merdeka.csv` (cache in-memory), `MAPEL_ALIASES`, `normalize_class_level()`, `resolve_jenjang()`, dan `baca_silabus()` berfilter jenjang/kelas/jalur/kurikulum. |
+| `predictor_prompts.py` | Template Prompt Prediktor | Dua varian prompt: silabus tersedia (alur `No. Urut + 1`) dan silabus tidak tersedia (larangan mengarang rujukan kurikulum). |
+| `scripts/regen_dataset.py` | Regenerasi Dataset | Menghasilkan ulang CSV runtime dari sheet `Materi` workbook sumber, memulihkan `Relevansi Jurusan/Karir`, dan membuang baris SMK kejuruan. |
 | `chatbot.py` | Study Assistant Chatbot | Chatbot interaktif ramah siswa SMP/SMA/SMK. Memanfaatkan riwayat chat (6 putaran terakhir) + konteks tugas aktif siswa, serta mengembalikan klasifikasi aksi (`reschedule`, `focus`, `null`). |
 | `feedback.py` | Feedback Analytics Engine | Menyimpan riwayat akurasi ke `DATA/feedback_history.json` secara atomik (`.tmp -> replace`). Menghitung rasio akurasi batch dan historis per mata pelajaran untuk feedback loop prediktor. |
 | `app.py` | Local Test Interface | Web dashboard lokal berbasis Flask untuk visualisasi interaktif skor tugas, slot kosong, dan perbandingan jadwal AI vs Fallback (`http://127.0.0.1:5000`). |
@@ -69,8 +72,9 @@ Dokumen ini adalah **Source of Truth** utama bagi AI Agent maupun developer yang
   - Groq (Llama-3, Mixtral).
   - OpenRouter / DeepSeek / Ollama lokal.
 - **Data Stores & Datasets**:
-  - `DATA/kurikulum_merdeka.csv`: Dataset silabus Kurikulum Merdeka resmi (910 topik materi SD, SMP, SMA, SMK).
-  - `DATA/silabus_awal.csv`: Dataset acuan awal Fase F (cadangan).
+  - `DATA/kurikulum_merdeka.csv`: Dataset **runtime** (440 baris): SMA 337 + SMK 103 (hanya mapel umum). Dihasilkan `scripts/regen_dataset.py` dari workbook sumber. Baris **SD (325) dan SMP (101) dibuang** karena engine memprediksi siswa SMA/SMK; materi kejuruan SMK (PPLG, TJKT, PKK, PKL) juga **tidak** ada di runtime.
+  - `DATA/kurikulum_merdeka.xlsx`: Salinan byte-identik workbook sumber; rujukan audit, tidak dibaca runtime.
+  - `DATA/silabus_awal.csv`: Cadangan lama Fase F; hanya dibaca bila CSV utama tidak ada.
   - `DATA/feedback_history.json`: Penyimpanan rekam jejak akurasi materi berbasis file JSON atomik.
 - **Testing**: **Pytest** (148 unit & integration test cases, 100% offline).
 
@@ -121,20 +125,42 @@ Dokumen ini adalah **Source of Truth** utama bagi AI Agent maupun developer yang
 [POST /predict] -> check_auth (Bearer AI_API_KEY)
        │
        ▼
+[service.py] -> PredictionPayload
+  ├── Validasi `jenjang` ∈ {SD, SMP, SMA, SMK} (Literal) -> 422 bila nilai lain
+  │     (SD/SMP diterima demi kompatibilitas, tetapi tanpa silabus runtime)
+  └── Tanpa `jenjang` pada kelas 10-12 -> default SMA (backward compatible)
+       │
+       ▼
 [predictor.py] -> predict_material()
-  ├── Normalisasi nama mata pelajaran via MAPEL_ALIASES
-  ├── Normalisasi jenjang/kelas/fase via normalize_class_level()
-  ├── RAG Filter silabus resmi di DATA/kurikulum_merdeka.csv
+  ├── normalisasi_riwayat() riwayat tugas siswa
+  ├── resolve_jenjang() -> jenjang efektif (eksplisit; default SMA utk 10-12, dan utk kelas kosong)
+  ├── [predictor_data.py] baca_silabus(subject, class_level, curriculum, jenjang)
+  │     └── Dataset hanya SMA + mapel umum SMK; kelas SD/SMP -> hasil kosong
+  │     ├── Normalisasi nama mapel via MAPEL_ALIASES
+  │     ├── Filter ketat: jabatan mapel, jenjang, kelas/fase, jalur, kurikulum
+  │     └── Hasil hanya berisi jenjang yang diminta (SMA dan SMK tidak dicampur)
   ├── Baca akurasi historis mapel via feedback.baca_akurasi_per_mapel()
   ├── Jika LLM aktif:
-  │     └── Prompt LLM dengan riwayat tugas lampau + silabus acuan + akurasi
-  └── Jika LLM gagal / offline:
-        └── cari_topik_berikutnya() (Heuristik: No. Urut silabus + 1)
+  │     ├── [predictor_prompts.py] build_prediction_prompt()
+  │     │     ├── Silabus ada  -> alur `No. Urut + 1`, rujukan resmi
+  │     │     └── Silabus kosong -> inferensi jujur, larangan mengarang bab
+  │     ├── LLM berhasil -> source="ai"
+  │     └── LLM gagal/timeout/JSON rusak -> fallback deterministik
+  └── Silabus kosong (mis. mapel kejuruan SMK):
+        └── Fallback generik: source="fallback", syllabus_reference="unavailable"
        │
        ▼
 [JSON Response 200] -> {predicted_topic, confidence, reason, prerequisites,
                         preparation_suggestion, syllabus_reference, source}
 ```
+
+**Routing mapel tanpa silabus:** bila `baca_silabus()` mengembalikan hasil kosong
+(mata pelajaran kejuruan SMK atau mapel di luar dataset), LLM **tetap dipanggil**
+dengan riwayat tugas dan konteks yang diizinkan, tetapi prompt melarang klaim
+rujukan kurikulum. Kegagalan provider tidak menghasilkan HTTP 500; fallback
+deterministik mengembalikan `syllabus_reference: "unavailable"` dengan confidence
+rendah. Nama lengkap siswa, catatan pribadi, dan deskripsi rahasia tetap tidak
+dikirim ke LLM (lihat 6.4).
 
 ### 5.3 Alur Endpoint `/chat` (Conversational Assistant)
 ```
@@ -179,7 +205,7 @@ Semua AI Agent yang mengedit atau membuat file di codebase ini **WAJIB** mematuh
 - **Batas Toleransi Maksimum**: **~400 baris kode**.
 - **Refactoring Requirement**:
   - Jika suatu file mendekati 400 baris, pecah modul menjadi sub-modul logis (misalnya memisahkan helper, parser, skema Pydantic, atau prompt template).
-  - *Catatan Codebase*: File `predictor.py` saat ini berukuran ~706 baris karena memuat kamus alias, parser dataset, dan logika heuristik sekaligus. Jangan menambah baris baru ke dalam `predictor.py` tanpa merencanakan modularisasi/ekstraksi (misalnya ke `predictor_rag.py` atau `predictor_prompts.py`).
+  - *Catatan Codebase*: Alur prediksi sudah dimodularisasi — `predictor.py` (396 baris) memuat alur prediksi dan fallback, `predictor_data.py` (327 baris) memuat dataset/alias/`baca_silabus()`, dan `predictor_prompts.py` (175 baris) memuat template prompt. Jangan menambah kamus alias atau parser dataset kembali ke `predictor.py`.
 
 ### 6.2 Fail-Safe & Non-Breaking Contract
 - **Dilarang keras melempar unhandled exception (HTTP 500)** pada request penjadwalan atau prediksi karena kegagalan pihak ketiga (LLM/API eksternal).

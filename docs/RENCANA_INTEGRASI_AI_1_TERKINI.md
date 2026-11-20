@@ -199,7 +199,7 @@ ctrl.DB.WithContext(konteks.Request.Context()).
      ```bash
      pytest -v
      ```
-     Pastikan 100 test case lulus.
+     Pastikan seluruh test case offline (`venv/bin/pytest -v`) lulus.
   3. Jalankan service di background port 8000:
      ```bash
      uvicorn service:app --host 127.0.0.1 --port 8000

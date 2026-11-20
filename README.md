@@ -7,7 +7,7 @@ Engine kecerdasan buatan terpadu Stoodify:
 
 Jadwal dan prediksi materi diproses oleh **LLM OpenAI-compatible** (Groq, Google Gemini via OpenAI-endpoint, OpenAI, OpenRouter, Ollama) atau, jika AI offline/timeout/tanpa key, oleh **fallback deterministik**.
 
-Repo ini menyediakan service HTTP untuk backend (FastAPI di `service.py`), halaman uji lokal (Flask di `app.py`), dan test suite otomatis (117 test cases). Terhubung ke backend Go melalui endpoint `POST /schedule`, `POST /predict`, dan `POST /feedback` dengan autentikasi `Bearer <AI_API_KEY>`.
+Repo ini menyediakan service HTTP untuk backend (FastAPI di `service.py`), halaman uji lokal (Flask di `app.py`), dan test suite otomatis (182 test cases). Terhubung ke backend Go melalui endpoint `POST /schedule`, `POST /predict`, dan `POST /feedback` dengan autentikasi `Bearer <AI_API_KEY>`.
 
 ## Fitur
 
@@ -17,11 +17,15 @@ Repo ini menyediakan service HTTP untuk backend (FastAPI di `service.py`), halam
 | Time-Slot Finder | `slots.py` | Slot kosong = jam belajar − jadwal sekolah − kegiatan rutin |
 | Fallback Scheduler | `scheduler.py` | Jadwal greedy tanpa AI, lengkap dengan teks alasan dan peringatan |
 | AI Scheduler (LLM) | `llm.py` | Prompt, pemanggilan OpenAI-compatible API, batas timeout, cache, retry, dan model fallback |
-| Material Predictor | `predictor.py` | Prediksi materi mendatang berbasis riwayat tugas dan silabus Kurikulum Merdeka (RAG) |
+| Material Predictor | `predictor.py` | Alur prediksi materi: retrieval silabus berfilter jenjang, pemanggilan LLM, dan fallback deterministik |
+| Sumber Data Silabus | `predictor_data.py` | Pemuatan dataset, kamus alias mapel, normalisasi kelas, dan `baca_silabus()` |
+| Prompt Prediktor | `predictor_prompts.py` | Dua varian prompt: silabus tersedia dan silabus tidak tersedia (mapel vokasi) |
+| Regenerasi Dataset | `scripts/regen_dataset.py` | Hasilkan ulang CSV runtime dari workbook sumber, termasuk membuang baris vokasi SMK |
 | Feedback Analytics | `feedback.py` | Evaluasi feedback ketepatan prediksi materi global dan per mata pelajaran |
 | Validator | `validator.py` | Validasi JSON (Pydantic) dan aturan batas jadwal sebelum hasil AI disetujui |
 | Halaman uji | `app.py`, `templates/index.html` | Antarmuka interaktif lokal untuk evaluasi skor, slot, dan jadwal |
-| Dataset Silabus | `DATA/silabus_awal.csv` | Silabus referensi Kurikulum Merdeka Fase F (Matematika, Pemrograman, B. Indonesia) |
+| Dataset Silabus | `DATA/kurikulum_merdeka.csv` | Dataset runtime Kurikulum Merdeka: SMA dan mapel umum SMK (440 baris) |
+| Dataset Cadangan | `DATA/silabus_awal.csv` | Silabus Fase F lama; hanya dibaca bila `kurikulum_merdeka.csv` tidak ada |
 | Dataset dummy | `data.py` | 1 siswa, jadwal sekolah, kegiatan rutin, 8 tugas |
 
 ## Struktur folder
@@ -29,19 +33,24 @@ Repo ini menyediakan service HTTP untuk backend (FastAPI di `service.py`), halam
 ```
 stoodify-ai-1/
 ├── DATA/
-│   └── silabus_awal.csv  # Dataset acuan silabus Kurikulum Merdeka (RAG)
+│   ├── kurikulum_merdeka.csv  # Dataset runtime utama (RAG) — 440 baris
+│   ├── kurikulum_merdeka.xlsx # Salinan byte-identik workbook sumber
+│   └── silabus_awal.csv       # Cadangan lama (hanya bila CSV utama tidak ada)
 ├── data.py               # Dataset buatan + waktu acuan pengujian
 ├── priority.py           # Rumus skor prioritas tugas
 ├── slots.py              # Time-slot finder
 ├── scheduler.py          # Fallback greedy scheduler
-├── predictor.py          # Material & Topic Predictor (Integrasi AI-2)
+├── predictor.py          # Alur prediksi materi (LLM + fallback)
+├── predictor_data.py     # Dataset, alias mapel, baca_silabus()
+├── predictor_prompts.py  # Template prompt LLM (silabus ada/tidak ada)
+├── scripts/regen_dataset.py  # Regenerasi CSV runtime dari workbook sumber
 ├── feedback.py           # Evaluasi metrik feedback akurasi materi
 ├── adapter.py            # Adaptasi payload backend Go <-> struktur engine
 ├── service.py            # Service FastAPI (POST /schedule, /predict, /feedback)
 ├── validator.py          # Validasi output LLM dan aturan jadwal
 ├── llm.py                # Integrasi LLM (OpenAI-compatible)
 ├── app.py                # Flask (halaman uji)
-├── tests/                # Test suite pytest (117 test cases)
+├── tests/                # Test suite pytest (182 test cases, offline)
 ├── .env.example          # Contoh konfigurasi environment
 ├── pytest.ini
 └── requirements.txt
@@ -146,7 +155,7 @@ Nama siswa tidak dikirim ke LLM. Hasil AI yang sukses di-cache 10 menit untuk me
 python -m pytest -v
 ```
 
-Ada 100 tes, tanpa internet dan tanpa API key (LLM diganti tiruan):
+Ada 182 tes, tanpa internet dan tanpa API key (LLM diganti tiruan):
 
 | File | Isi |
 |---|---|
@@ -155,7 +164,9 @@ Ada 100 tes, tanpa internet dan tanpa API key (LLM diganti tiruan):
 | `tests/test_scheduler.py` | Aturan jadwal pada data buatan dan 150 siswa acak berseed |
 | `tests/test_llm.py` | JSON rusak, sesi melanggar aturan, timeout, error API, retry 503, pindah model, cache |
 | `tests/test_adapter.py` | Pemetaan data backend: jenis tugas, hari, zona waktu, tugas selesai/ditunda, sesi lama, data opsional hilang |
-| `tests/test_service.py` | Autentikasi bearer, format balasan, fallback, timeout, privasi prompt |
+| `tests/test_service.py` | Autentikasi bearer, format balasan, fallback, timeout, privasi prompt, field `jenjang` dan validasi 422 |
+| `tests/test_predictor.py` | Filter jenjang, alias mapel, jalur vokasi tanpa silabus, fallback aman |
+| `tests/test_dataset.py` | Header, jumlah baris 440, hanya SMA+SMK, batas mapel kejuruan SMK |
 
 Tes prioritas mengecek aturan (urutan dan logika), bukan angka persis, sehingga tidak ikut rusak saat bobot dikalibrasi.
 
@@ -221,6 +232,78 @@ Yang dilakukan engine terhadap payload backend:
 - Field `description` dan `notes` tidak dikirim ke LLM.
 
 Respons memakai nama field yang sama dengan struct `slotRekomendasi` di backend (`recommended_date`, dst.). Field `warnings`, `source`, `fallback_reason` baru terbaca setelah backend menambahkannya.
+
+## Dataset silabus dan kontrak `/predict`
+
+### File yang dibaca saat runtime
+
+Prediktor hanya membaca **`DATA/kurikulum_merdeka.csv`** (UTF-8 BOM). File
+`DATA/silabus_awal.csv` adalah cadangan lama yang dipakai hanya jika CSV utama
+tidak ada. `DATA/kurikulum_merdeka.xlsx` adalah salinan byte-identik dari workbook
+sumber dan **tidak dibaca saat runtime**; ia disimpan untuk audit.
+
+### Hubungan CSV dengan workbook sumber
+
+`DATA/kurikulum_merdeka.csv` dihasilkan oleh `scripts/regen_dataset.py` dari sheet
+`Materi` pada `Kurikulum_Merdeka_Gabungan_Sempurna.xlsx` (di direktori proyek induk):
+
+```bash
+venv/bin/python scripts/regen_dataset.py --check   # bandingkan tanpa menulis
+venv/bin/python scripts/regen_dataset.py           # tulis ulang CSV + mirror XLSX
+```
+
+### Cakupan runtime
+
+| Kelompok | Baris | Keterangan |
+|---|---:|---|
+| SMA | 337 | Kelas 10–12, 19 mapel |
+| SMK (mapel umum) | 103 | Kelas 10–12, 10 mapel umum |
+| **Total** | **440** | |
+
+Stoodify memprediksi siswa SMA dan SMK. Baris **SD dan SMP tidak dimasukkan** ke
+dataset runtime: jenjang itu tidak memakai alur prediksi materi ini. Bila request
+datang dengan kelas SD/SMP, prediktor tetap merespons tanpa error tetapi menandai
+`syllabus_reference: "unavailable"` (prediksi dari riwayat tugas/LLM saja).
+
+Mata pelajaran umum SMK yang tersedia: Pendidikan Agama dan Budi Pekerti,
+Pendidikan Pancasila, Bahasa Indonesia, Matematika, Bahasa Inggris, Sejarah,
+Seni dan Budaya, PJOK, Informatika, dan IPAS.
+
+**Batas cakupan kejuruan:** materi kejuruan SMK (PPLG, TJKT, Projek Kreatif dan
+Kewirausahaan, PKL) **tidak ada** di dataset karena hanya mewakili sebagian kecil
+program keahlian di Indonesia. Untuk mapel seperti itu, endpoint tetap mengembalikan
+prediksi dari LLM berdasarkan riwayat tugas, dengan `syllabus_reference: "unavailable"`.
+Dataset ini **bukan** klaim silabus lengkap seluruh jurusan SMK.
+
+### Kontrak `/predict`
+
+Field baru yang opsional: **`jenjang`** dengan nilai `"SD"`, `"SMP"`, `"SMA"`, `"SMK"`.
+
+- Nilai lain (termasuk `"sma"` huruf kecil, `"MA"`, `"kuliah"`, atau angka) ditolak
+  dengan **HTTP 422**.
+- Bila `jenjang` kosong pada kelas 10–12, sistem memakai default **SMA** agar request
+  lama tetap kompatibel dan tidak mencampur silabus SMA dan SMK.
+- Kelas 1–9 tetap diterima demi kompatibilitas, tetapi tidak punya silabus runtime:
+  hasilnya `syllabus_reference: "unavailable"`. SMP bukan target pengguna aplikasi.
+- Bila `class_level` **dan** `jenjang` sama-sama kosong, sistem memakai default SMA
+  sehingga silabus SMA dan SMK tidak pernah tercampur dalam satu hasil.
+- **Klien/backend yang memprediksi siswa SMK wajib mengirim `jenjang: "SMK"`.**
+- Bentuk respons tidak berubah.
+
+Contoh request SMK:
+
+```json
+{
+  "subject": "Matematika",
+  "difficulty": 4,
+  "class_level": "11",
+  "jenjang": "SMK",
+  "history": []
+}
+```
+
+Penjelasan lengkap beserta contoh SMA dan mapel vokasi ada di
+[`docs/to-do-dataset.md`](./docs/to-do-dataset.md).
 
 ## Batasan saat ini
 

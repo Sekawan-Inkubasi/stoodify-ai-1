@@ -18,7 +18,7 @@ main-arch/
 ```
 
 ### 1.1 `stoodify-ai-1` (Smart Study Scheduler & Workload Balancer)
-- **Teknologi & Runtime:** Python 3.11+, FastAPI (production service di `service.py`), Flask (halaman uji interaktif di `app.py`), Uvicorn, Pydantic, HTTPX, Pytest (100 test cases).
+- **Teknologi & Runtime:** Python 3.11+, FastAPI (production service di `service.py`), Flask (halaman uji interaktif di `app.py`), Uvicorn, Pydantic, HTTPX, Pytest (182 test cases, offline).
 - **Tanggung Jawab:**
   1. Menghitung skor prioritas tugas (0 - 100) berdasarkan 5 parameter berbobot: deadline urgency (40%), difficulty (20%), estimated duration (15%), task importance (15%), dan late risk (10%), dengan penyesuaian diskon progres (`priority.py`).
   2. Menemukan slot waktu luang siswa dalam rentang 14 hari dengan mengurangkan jam sekolah dan kegiatan rutin dari jam belajar preferensi siswa (`slots.py`).
@@ -215,7 +215,7 @@ Mengkonversi seluruh logika penjadwalan dan pemanggilan LLM langsung ke dalam ko
   - Tidak memerlukan pengelolaan API key bersama (`AI_API_KEY`) antar server internal.
 - **Kekurangan & Risiko:**
   - **Hilangnya Ekosistem AI Python:** Python adalah standar de facto AI/ML. Memindahkan prompt engineering, parsing silabus, validasi Pydantic, dan manipulasi data ke Go membatasi fleksibilitas integrasi library AI masa depan (seperti RAG, embeddings, LangChain, atau fine-tuning).
-  - **Duplikasi & Pemborosan Upaya:** Logika `stoodify-ai-1` sudah matang dengan 100 test case pytest di Python. Menulis ulang algoritma greedy, scoring 5 parameter, dan slot calculator ke Go membutuhkan waktu signifikan dan rawan regresi.
+  - **Duplikasi & Pemborosan Upaya:** Logika `stoodify-ai-1` sudah matang dengan 182 test case pytest offline di Python. Menulis ulang algoritma greedy, scoring 5 parameter, dan slot calculator ke Go membutuhkan waktu signifikan dan rawan regresi.
   - **Bottleneck Kolaborasi Tim:** Developer backend harus menangani logika prompt AI yang sering berubah, sementara developer AI kehilangan kontrol langsung atas kode eksekusinya karena tidak memiliki akses commit ke repo backend.
   - **Coupling Tinggi:** Crash atau memory spike akibat pengolahan AI besar dapat mengganggu endpoint transaksional utama aplikasi (auth, CRUD tugas).
 
@@ -272,7 +272,7 @@ stoodify-backend  ---> [HTTP POST] ---> Stoodify AI Engine Terpadu (FastAPI Modu
 
 ### Alasan Teknis Pemilihan:
 1. **Menghormati Struktur Existing Tanpa Rewrite:** `stoodify-backend` sudah dirancang dari awal untuk memanggil service AI via HTTP (`AI_SCHEDULER_URL` dan `AI_PREDICTOR_URL`) lengkap dengan mekanisme fallback rule-based lokal. Tidak ada kebutuhan mendesak untuk mengubah pola arsitektur backend.
-2. **Kesiapan Instan `stoodify-ai-1`:** Service FastAPI di `stoodify-ai-1/service.py` sudah memiliki adapter, schema mapper, validasi Pydantic, autentikasi Bearer, dan 100 test case. Fitur ini dapat langsung dideploy dan dihubungkan ke backend hari ini juga.
+2. **Kesiapan Instan `stoodify-ai-1`:** Service FastAPI di `stoodify-ai-1/service.py` sudah memiliki adapter, schema mapper, validasi Pydantic, autentikasi Bearer, dan 182 test case offline. Fitur ini dapat langsung dideploy dan dihubungkan ke backend hari ini juga.
 3. **Isolasi Risiko Tahap Pengembangan `stoodify-ai-2`:** `stoodify-ai-2` masih berupa baseline prototype yang belum memiliki layer HTTP dan test suite. Menjaga AI-2 tetap terpisah atau menggunakan fallback sementara di backend mencegah instabilitas pada fitur penjadwalan AI-1 yang sudah siap rilis.
 4. **Pemisahan Kewenangan yang Tegas:**
    - Anda fokus menyempurnakan kontrak dan deployment `stoodify-ai-1` serta memastikan responsivitas UI di `stoodify-mobile` dan `stoodify-apk`.

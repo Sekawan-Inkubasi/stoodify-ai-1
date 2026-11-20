@@ -9,6 +9,7 @@ from predictor import (
     normalize_class_level,
     normalisasi_riwayat,
     predict_material,
+    resolve_jenjang,
 )
 
 
@@ -62,20 +63,63 @@ def test_prediksi_sekuensial_no_urut_plus_satu():
     assert "barisan aritmetika" in pred["preparation_suggestion"].lower()
 
 
-def test_prediksi_vokasi_smk_pplg():
-    # Siswa SMK PPLG selesai Pemrograman Web Frontend -> Pemrograman Web Backend
-    silabus_pplg = baca_silabus("Pengembangan Perangkat Lunak dan Gim (PPLG)", class_level="11")
-    assert len(silabus_pplg) > 0
-    pred = fallback_prediction(
+def test_mapel_vokasi_smk_tidak_ada_di_dataset():
+    assert baca_silabus(
+        "Pengembangan Perangkat Lunak dan Gim (PPLG)", class_level="11", jenjang="SMK"
+    ) == []
+    assert baca_silabus(
+        "Teknik Jaringan Komputer dan Telekomunikasi (TJKT)", class_level="11", jenjang="SMK"
+    ) == []
+
+
+def test_mapel_vokasi_smk_diarahkan_ke_llm():
+    mock_response = json.dumps({
+        "predicted_topic": "Pemrograman Web Backend",
+        "confidence": 0.6,
+        "reason": "Melanjutkan proyek web dari tugas frontend sebelumnya.",
+        "prerequisites": "Dasar pemrograman web dan basis data",
+        "preparation_suggestion": "Pelajari dasar API dan routing backend.",
+    })
+    prompt_diterima = {}
+
+    def fake_call(prompt):
+        prompt_diterima["prompt"] = prompt
+        return mock_response
+
+    result = predict_material(
         subject="Pengembangan Perangkat Lunak dan Gim (PPLG)",
         difficulty=4,
         task_history=[{"title": "Projek Web", "material_name": "Pemrograman Web Frontend"}],
-        silabus=silabus_pplg,
         class_level="11",
+        jenjang="SMK",
+        call_fn=fake_call,
     )
-    assert pred["source"] == "fallback"
-    assert "Backend" in pred["predicted_topic"]
-    assert pred["syllabus_reference"] == "available"
+
+    assert result["source"] == "ai"
+    assert result["predicted_topic"] == "Pemrograman Web Backend"
+    assert result["syllabus_reference"] == "unavailable"
+    assert "TIDAK TERSEDIA" in prompt_diterima["prompt"]
+    assert "JANGAN mengarang nomor bab" in prompt_diterima["prompt"]
+    assert "No. Urut sekarang + 1" not in prompt_diterima["prompt"]
+
+
+def test_mapel_vokasi_smk_llm_gagal_fallback_aman():
+    def gagal(prompt):
+        raise TimeoutError("provider timeout")
+
+    result = predict_material(
+        subject="Teknik Jaringan Komputer dan Telekomunikasi (TJKT)",
+        difficulty=4,
+        task_history=[{"title": "Konfigurasi Router", "material_name": "Routing Statis"}],
+        class_level="11",
+        jenjang="SMK",
+        call_fn=gagal,
+    )
+
+    assert result["source"] == "fallback"
+    assert result["syllabus_reference"] == "unavailable"
+    assert "Routing Statis" in result["predicted_topic"]
+    assert result["confidence"] <= 50
 
 
 def test_normalisasi_riwayat():
@@ -168,3 +212,76 @@ def test_predict_material_llm_json_rusak_pindah_fallback():
     )
     assert result["source"] == "fallback"
     assert result["predicted_topic"] != ""
+
+
+def test_baca_silabus_filter_jenjang_per_kelas():
+    for kelas in ("10", "11", "12"):
+        sma = baca_silabus("Matematika", class_level=kelas, jenjang="SMA")
+        smk = baca_silabus("Matematika", class_level=kelas, jenjang="SMK")
+        assert sma, f"silabus SMA kelas {kelas} kosong"
+        assert smk, f"silabus SMK kelas {kelas} kosong"
+        assert {s["jenjang"] for s in sma} == {"SMA"}
+        assert {s["jenjang"] for s in smk} == {"SMK"}
+        assert {s["id"] for s in sma}.isdisjoint({s["id"] for s in smk})
+        assert [s["nama_topik"] for s in sma] != [s["nama_topik"] for s in smk]
+
+
+def test_baca_silabus_mapel_umum_smk_hanya_baris_smk():
+    silabus = baca_silabus("Bahasa Indonesia", class_level="11", jenjang="SMK")
+    assert silabus
+    assert {s["jenjang"] for s in silabus} == {"SMK"}
+    silabus_sma = baca_silabus("Bahasa Indonesia", class_level="11", jenjang="SMA")
+    assert {s["jenjang"] for s in silabus_sma} == {"SMA"}
+    assert len(silabus) != len(silabus_sma)
+
+
+def test_baca_silabus_alias_mapel_umum_smk():
+    assert baca_silabus("b. inggris", class_level="10", jenjang="SMK")
+    assert baca_silabus("pai", class_level="10", jenjang="SMK")
+    assert {s["jenjang"] for s in baca_silabus("b. inggris", class_level="10", jenjang="SMK")} == {"SMK"}
+
+
+def test_baca_silabus_kelas_10_12_tanpa_jenjang_default_sma():
+    tanpa_jenjang = baca_silabus("Matematika", class_level="11")
+    eksplisit_sma = baca_silabus("Matematika", class_level="11", jenjang="SMA")
+    assert [s["id"] for s in tanpa_jenjang] == [s["id"] for s in eksplisit_sma]
+    assert {s["jenjang"] for s in tanpa_jenjang} == {"SMA"}
+
+
+def test_resolve_jenjang_default_dan_inferensi():
+    assert resolve_jenjang("11") == "SMA"
+    assert resolve_jenjang("XII") == "SMA"
+    assert resolve_jenjang("11", "SMK") == "SMK"
+    assert resolve_jenjang("8") == "SMP"
+    assert resolve_jenjang("4") == "SD"
+    assert resolve_jenjang("") == "SMA"
+
+
+def test_predict_material_meneruskan_jenjang_ke_retrieval():
+    sma = predict_material(subject="Matematika", class_level="11", jenjang="SMA")
+    smk = predict_material(subject="Matematika", class_level="11", jenjang="SMK")
+    assert sma["syllabus_reference"] == "available"
+    assert smk["syllabus_reference"] == "available"
+    assert sma["predicted_topic"] != smk["predicted_topic"]
+
+
+def test_jenjang_sd_smp_tidak_punya_silabus_runtime():
+    assert baca_silabus("Matematika", class_level="4") == []
+    assert baca_silabus("Matematika", class_level="VIII") == []
+    assert baca_silabus("Matematika", class_level="IX", jenjang="SMP") == []
+
+
+def test_siswa_smp_dapat_prediksi_tanpa_rujukan_silabus():
+    result = predict_material(
+        subject="Matematika",
+        class_level="VIII",
+        task_history=[{"material_name": "Persamaan Linear Dua Variabel"}],
+    )
+    assert result["syllabus_reference"] == "unavailable"
+    assert "Persamaan Linear Dua Variabel" in result["predicted_topic"]
+
+
+def test_tanpa_kelas_dan_jenjang_tidak_mencampur_sma_smk():
+    silabus = baca_silabus("Matematika")
+    assert silabus
+    assert {s["jenjang"] for s in silabus} == {"SMA"}

@@ -10,7 +10,7 @@ import hmac
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -46,6 +46,15 @@ class PredictionPayload(BaseModel):
     history: List[Dict[str, Any]] = Field(default_factory=list, description="Daftar tugas lampau")
     class_level: Optional[str] = Field(default="", description="Jenjang kelas siswa (misal: XI, XII)")
     curriculum: Optional[str] = Field(default="", description="Kurikulum acuan (misal: Kurikulum Merdeka)")
+    jenjang: Optional[Literal["SD", "SMP", "SMA", "SMK"]] = Field(
+        default=None,
+        description=(
+            "Jenjang pendidikan siswa: SD, SMP, SMA, atau SMK. "
+            "Opsional; bila kosong pada kelas 10-12, default ke SMA agar payload lama "
+            "tidak mencampur silabus SMA dan SMK. Klien yang memprediksi siswa SMK "
+            "wajib mengirim jenjang: \"SMK\"."
+        ),
+    )
 
 
 class FeedbackPayload(BaseModel):
@@ -109,11 +118,12 @@ async def predict(payload: PredictionPayload, authorization: str | None = Header
         task_history=payload.history,
         class_level=payload.class_level or "",
         curriculum=payload.curriculum or "",
+        jenjang=payload.jenjang or "",
     )
 
     latency = int((time.time() - t0) * 1000)
-    log.info("predict subject='%s' history=%d topic='%s' conf=%.1f source=%s ms=%d",
-             sub, len(payload.history), result.get("predicted_topic"),
+    log.info("predict subject='%s' jenjang='%s' history=%d topic='%s' conf=%.1f source=%s ms=%d",
+             sub, payload.jenjang or "(default)", len(payload.history), result.get("predicted_topic"),
              result.get("confidence", 0), result.get("source"), latency)
 
     return {

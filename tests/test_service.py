@@ -151,6 +151,70 @@ def test_predict_dengan_auth_sukses(client):
     assert data["source"] in ("ai", "fallback")
 
 
+def test_predict_tanpa_jenjang_kelas_10_12_default_sma(client):
+    payload = {"subject": "Matematika", "difficulty": 4, "class_level": "11", "history": []}
+    r = client.post("/predict", json=payload, headers=H)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["syllabus_reference"] == "available"
+    assert data["predicted_topic"] == "Bilangan Kompleks"
+
+    payload_smk = dict(payload, jenjang="SMK")
+    data_smk = client.post("/predict", json=payload_smk, headers=H).json()
+    assert data_smk["predicted_topic"] != data["predicted_topic"]
+
+
+def test_predict_jenjang_smk_meneruskan_filter_smk(client):
+    payload = {
+        "subject": "Matematika",
+        "difficulty": 4,
+        "class_level": "11",
+        "jenjang": "SMK",
+        "history": [],
+    }
+    r = client.post("/predict", json=payload, headers=H)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["syllabus_reference"] == "available"
+    assert data["predicted_topic"] == "Fungsi Komposisi dan Fungsi Invers"
+
+
+def test_predict_mapel_vokasi_smk_silabus_unavailable(client):
+    payload = {
+        "subject": "Pengembangan Perangkat Lunak dan Gim (PPLG)",
+        "difficulty": 4,
+        "class_level": "11",
+        "jenjang": "SMK",
+        "history": [{"title": "Projek Web", "material_name": "Pemrograman Web Frontend"}],
+    }
+    r = client.post("/predict", json=payload, headers=H)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["syllabus_reference"] == "unavailable"
+    assert data["source"] == "fallback"
+
+
+@pytest.mark.parametrize("jenjang", ["SMA", "SMK", "SD", "SMP"])
+def test_predict_jenjang_valid_diterima(client, jenjang):
+    payload = {"subject": "Matematika", "difficulty": 3, "jenjang": jenjang}
+    assert client.post("/predict", json=payload, headers=H).status_code == 200
+
+
+@pytest.mark.parametrize("jenjang", ["sma", "kuliah", "MA", "", 10])
+def test_predict_jenjang_tidak_valid_ditolak_422(client, jenjang):
+    payload = {"subject": "Matematika", "difficulty": 3, "jenjang": jenjang}
+    assert client.post("/predict", json=payload, headers=H).status_code == 422
+
+
+def test_predict_jenjang_tidak_mengubah_bentuk_respons(client):
+    payload = {"subject": "Matematika", "difficulty": 3, "jenjang": "SMK"}
+    data = client.post("/predict", json=payload, headers=H).json()
+    assert set(data) == {
+        "predicted_topic", "confidence", "reason", "prerequisites",
+        "preparation_suggestion", "syllabus_reference", "source", "latency_ms",
+    }
+
+
 def test_feedback_endpoint(client):
     payload = {
         "data_feedback": [
