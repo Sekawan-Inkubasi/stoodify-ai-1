@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           git archive --format=tar.gz --prefix=stoodify-ai-1/ -o "$RUNNER_TEMP/release.tar.gz" HEAD
-          tar -tzf "$RUNNER_TEMP/release.tar.gz" | grep -qx 'stoodify-ai-1/service.py'
+          tar -tf "$RUNNER_TEMP/release.tar.gz" stoodify-ai-1/service.py >/dev/null
           ls -lh "$RUNNER_TEMP/release.tar.gz"
 
       - name: Configure SSH
