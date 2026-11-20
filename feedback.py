@@ -18,7 +18,10 @@ from typing import Any, Dict, List, Optional
 log = logging.getLogger("stoodify.feedback")
 
 BASE_DIR = Path(__file__).resolve().parent
-FEEDBACK_HISTORY_PATH = BASE_DIR / "DATA" / "feedback_history.json"
+FEEDBACK_HISTORY_PATH = Path(
+    os.getenv("FEEDBACK_HISTORY_PATH", "").strip()
+    or (BASE_DIR / "DATA" / "feedback_history.json")
+)
 
 # Label feedback yang diterima dari backend Go
 _LABEL_BENAR = {"accurate", "correct", "benar", "tepat"}
